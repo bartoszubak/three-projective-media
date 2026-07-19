@@ -1,69 +1,95 @@
 # three-projective-media
 
-`three-projective-media` is a host-neutral Three.js package for projecting an
-HTML video texture directly onto existing mesh geometry in projector space.
+`three-projective-media` is a host-neutral Three.js package for projecting one
+HTML video texture onto host-selected mesh geometry in projector space.
 
-## Consumption and public API
+## Consumption and ownership
 
-The package exports source, material, projector, and projection-math helpers
-from `src/index.js`, which is also the package root export. In-repository hosts
-consume that source entry through a relative path. Linked or installed
-consumers can import `three-projective-media`; the other files under `src/`
-remain implementation details.
+The public source entry is `src/index.js`, also exposed as the package root.
+Repository hosts currently consume that source directly. There is deliberately
+no workspace, package build, lockfile, publish step, external repository, or
+standalone sandbox yet.
 
-The projector factory accepts a target `Object3D` and discovers supported
-meshes below it. It owns the video source, overlay meshes, shader material,
-projector camera, and their lifecycle. Calling `setTarget()` refreshes overlays
-without taking ownership of target geometry or materials.
+The package depends only on `three`, its own modules, and browser media
+primitives. It does not import application or product modules, React, routing,
+persistence, localization, asset resolution, or stores. Hosts own media URL
+resolution, authored records, receiver policy, UI, and lifecycle coordination.
 
-The current source-consumption model deliberately has no package build,
-workspace configuration, lockfile, or publish step. The package is intended to
-move to a separate repository after this in-repository boundary has stabilized.
+Package-owned tests are colocated under `tests/` and consume only the public
+source entry:
 
-## Projection model
+```bash
+node --test \
+  packages/projective-media/tests/projective-media-package.test.mjs \
+  packages/projective-media/tests/projective-media-receivers.test.mjs
+```
 
-The shader maps each rendered world position through the projector camera's
-view-projection matrix. Fragments outside the projected UV rectangle or camera
-depth range are rejected. Surface-facing rejection keeps the image off
-back-facing geometry, while edge feather softens the remaining projector
-boundary. The material supports `alpha` and `additive` blending, participates
-in Three.js tone mapping, keeps `depthTest` enabled and `depthWrite` disabled,
-and uses polygon offset to avoid z-fighting with its source surface.
+## Aim and receivers
 
-Overlay meshes share the source meshes' `BufferGeometry`; the package never
-mutates source materials, patches them with `onBeforeCompile`, or disposes
-source geometry. The overlays are owned by the projector and are detached
-before a target is replaced or released.
+Projector pose is independent from receiver selection. `setPose()` controls the
+camera position and look-at target; `setProjectorParameters()` controls FOV,
+aspect, near, and far without changing media or receivers.
 
-## Media source and browser autoplay
+Receivers are opt-in:
+
+- `setReceiverRoots(roots, { receiverFilter })` traverses only the supplied
+  `Object3D` roots;
+- `addReceiverRoot`, `removeReceiverRoot`, and `clearReceiverRoots` mutate root
+  configuration;
+- `setReceivers`, `addReceiver`, `removeReceiver`, and `clearReceivers` manage
+  explicit meshes;
+- `refreshReceivers()` diffs current descendants;
+- `detachReceiverObject(object)` detaches bindings in one subtree without
+  removing configured roots;
+- `getReceiverRoots`, `getReceiverMeshes`, and `getOverlayMeshes` expose
+  read-only collection copies.
+
+Overlapping roots and explicit receivers are deduplicated by source mesh
+identity, so a mesh has at most one overlay per projector. Refresh preserves
+valid bindings and the same media element, `VideoTexture`, audio state,
+playback position, fade state, camera pose, and FOV.
+
+The optional filter receives `{ object, root, material }` before overlay
+creation. A filter exception is isolated and rejects that candidate. The
+package never scans a global scene, observes mutations, or traverses roots in
+`update()`. Hosts explicitly refresh after their runtime objects change.
+
+`target`, `setTarget()`, and `getTarget()` remain compatibility APIs.
+`setTarget(object)` replaces receiver roots with one compatibility root;
+`setTarget(null)` clears that mode. `getTarget()` returns a root only while
+single-target compatibility mode is active. New integrations should use the
+receiver APIs.
+
+## Projection and culling
+
+The shader maps world positions through the projector camera view-projection
+matrix. It rejects fragments outside projected UV/depth bounds and back-facing
+geometry, supports edge feather plus alpha/additive blending, uses depth test
+without depth writes, and applies polygon offset.
+
+`update()` builds a projector frustum and tests only existing receiver
+bindings. A valid source `boundingSphere` is copied and transformed to world
+space; overlays outside the frustum are hidden. Missing spheres use a safe
+visible fallback and are not computed or written by the package. This
+broad-phase reduces draw calls; it is not occlusion or a projector depth map.
+
+Supported receivers are ordinary `Mesh` objects with `BufferGeometry` and a
+position attribute. `SkinnedMesh`, `InstancedMesh`, invalid geometry, and
+projective overlay meshes are skipped. Source geometry and materials remain
+host-owned and are never disposed.
+
+There is no occlusion, depth map, keystone correction, multi-projector edge
+blending, volumetric beam, post-processing, or visible frustum helper by
+default.
+
+## Media and lifecycle
 
 `createProjectiveMediaSource` owns one inline `HTMLVideoElement` and one
-`VideoTexture`. Audio stays embedded in that video element. The source exposes
-play, pause, mute, volume, status and disposal controls. Muted autoplay is the
-portable default; a rejected `play()` becomes a controlled status result so a
-host can retry from a user gesture. Rebinding a target does not recreate the
-video, texture, or playback position.
+`VideoTexture`; audio remains embedded in the video. Muted autoplay is the
+portable default, and rejected playback becomes a controlled status result.
 
-## Dependency boundary
-
-The implementation depends only on `three` and browser media primitives. It
-does not import application stores, persistence, UI, routing, localization, or
-product-specific modules. It has no dependency on this repository's
-application or on any host product. Hosts provide target meshes and media URLs
-through public factory options.
-
-## Lifecycle
-
-Call `update()` from the host render loop. Use `setTarget(null)` before target
-geometry is destroyed and `setTarget(nextObject)` after replacement; this
-preserves the media source. Call `dispose()` when the projector is no longer
-needed. Disposal is idempotent and releases owned textures, materials, overlay
-meshes, listeners, camera and media resources.
-
-## Version 0.1 limits
-
-This version supports projective video overlays with alpha or additive
-blending. It does not provide authoring UI, persistence, asset resolution,
-cross-origin policy, host-specific target discovery, projector depth maps,
-occlusion, keystone correction, edge blending between multiple projectors,
-post-processing, or spatial audio.
+Call `update()` from the host render loop, refresh receivers only after
+host-owned lifecycle changes, and call `dispose()` at teardown. Disposal is
+idempotent: it removes overlays/listeners and releases the owned shader,
+texture, camera, and media resources without disposing source geometry or
+materials. Subscriber failures are isolated from state changes and teardown.
