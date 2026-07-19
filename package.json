@@ -1,0 +1,12 @@
+{
+  "name": "three-projective-media",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "peerDependencies": {
+    "three": ">=0.185.0 <0.186.0"
+  }
+}
