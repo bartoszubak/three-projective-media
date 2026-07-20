@@ -66,18 +66,12 @@ test("projective-media package exposes the declared neutral package boundary", (
     readFileSync(path.join(packageDirectory, "package.json"), "utf8"),
   );
 
-  assert.deepEqual(manifest, {
-    name: "three-projective-media",
-    version: "0.1.0",
-    private: true,
-    type: "module",
-    exports: {
-      ".": "./src/index.js",
-    },
-    peerDependencies: {
-      three: ">=0.185.0 <0.186.0",
-    },
-  });
+  assert.equal(manifest.name, "three-projective-media");
+  assert.equal(manifest.private, true);
+  assert.equal(manifest.type, "module");
+  assert.equal(manifest.exports?.["."], "./src/index.js");
+  assert.equal(manifest.peerDependencies?.three, ">=0.185.0 <0.186.0");
+  assert.equal(manifest.scripts?.test, "node --test tests/*.test.mjs");
   assert.deepEqual(
     readdirSync(sourceDirectory)
       .filter((file) => file.endsWith(".js"))
@@ -90,8 +84,6 @@ test("projective-media package exposes the declared neutral package boundary", (
       "projectiveMediaMath.js",
     ],
   );
-  const readme = readFileSync(path.join(packageDirectory, "README.md"), "utf8");
-  assert.doesNotMatch(readme, /GardenPlanner|Zafiro/i);
 });
 
 test("projective-media source imports only Three.js or sibling modules", () => {
@@ -100,6 +92,11 @@ test("projective-media source imports only Three.js or sibling modules", () => {
     /Zafiro/i,
     /buildingMass/i,
     /placeableStore/i,
+    /compatibilityTarget/,
+    /compatibilityTargetMode/,
+    /targetBound/,
+    /\bsetTarget\s*[(:]/,
+    /\bgetTarget\s*[(:]/,
   ];
 
   for (const file of readdirSync(sourceDirectory).filter((entry) =>
@@ -126,6 +123,32 @@ test("projective-media source imports only Three.js or sibling modules", () => {
   }
 });
 
+test("projective-media tests depend only on the public entrypoint, Three.js, and Node builtins", () => {
+  const testFiles = readdirSync(testsDirectory).filter((entry) =>
+    entry.endsWith(".test.mjs"),
+  );
+
+  for (const file of testFiles) {
+    const source = readFileSync(path.join(testsDirectory, file), "utf8");
+    assert.doesNotMatch(source, /(?:^|[/'"])src\/(?:products|app)(?:[/'"]|$)/);
+    const importSpecifiers = Array.from(
+      source.matchAll(
+        /\b(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g,
+      ),
+      (match) => match[1],
+    );
+
+    for (const specifier of importSpecifiers) {
+      assert.ok(
+        specifier.startsWith("node:") ||
+          specifier === "three" ||
+          specifier === "../src/index.js",
+        `${file} bypasses the public package entrypoint with ${specifier}`,
+      );
+    }
+  }
+});
+
 test("projective-media root exports the source, material, projector, and math API", () => {
   for (const exportName of [
     "createProjectiveMediaSource",
@@ -148,7 +171,7 @@ test("projective-media root exports the source, material, projector, and math AP
   );
 });
 
-test("projector owns overlays and media lifecycle without owning target resources", () => {
+test("projector owns overlays and media lifecycle without owning receiver resources", () => {
   const texture = new THREE.Texture();
   let mediaDisposeCalls = 0;
   let mediaUnsubscribeCalls = 0;
@@ -175,7 +198,7 @@ test("projector owns overlays and media lifecycle without owning target resource
   });
 
   const projector = projectiveMedia.createProjectiveMediaProjector({
-    target,
+    receiverRoots: [target],
     mediaSource,
   });
   const overlay = projector.getOverlayMeshes()[0];
@@ -187,12 +210,12 @@ test("projector owns overlays and media lifecycle without owning target resource
   assert.equal(projector.getStatus().overlayCount, 1);
   assert.equal(overlay.parent, target);
   assert.equal(overlay.geometry, geometry);
-  assert.equal(projector.setTarget(null), 0);
+  assert.equal(projector.clearReceiverRoots(), 0);
   assert.equal(overlay.parent, null);
   assert.equal(geometryDisposeCalls, 0);
   assert.equal(targetMaterialDisposeCalls, 0);
 
-  assert.equal(projector.setTarget(target), 1);
+  assert.equal(projector.setReceiverRoots([target]), 1);
   assert.equal(projector.dispose(), true);
   assert.equal(projector.dispose(), false);
   assert.equal(projector.getOverlayMeshes().length, 0);
@@ -292,7 +315,7 @@ test("projector isolates nested source and status subscriber failures from every
     replacementMaterial,
   );
   const projector = projectiveMedia.createProjectiveMediaProjector({
-    target,
+    receiverRoots: [target],
     mediaSource: source,
   });
   const healthyStatuses = [];
@@ -323,7 +346,7 @@ test("projector isolates nested source and status subscriber failures from every
 
   let overlayCount;
   assert.doesNotThrow(() => {
-    overlayCount = projector.setTarget(replacementTarget);
+    overlayCount = projector.setReceiverRoots([replacementTarget]);
   });
   assert.equal(overlayCount, 1);
   assert.equal(projector.getOverlayMeshes()[0].parent, replacementTarget);

@@ -25,6 +25,38 @@ const notifyListeners = (listeners, payload) => {
   }
 };
 
+const runCleanupStep = (cleanup) => {
+  try {
+    cleanup();
+  } catch {
+    // Cleanup is best-effort and later release steps must still run.
+  }
+};
+
+const releaseConfiguredVideo = ({
+  video,
+  domListeners,
+  texture = null,
+  releaseState,
+}) => {
+  if (releaseState.released) return false;
+  releaseState.released = true;
+
+  for (const [type, handler] of domListeners) {
+    runCleanupStep(() => video.removeEventListener?.(type, handler));
+  }
+  domListeners.clear();
+
+  runCleanupStep(() => video.pause?.());
+  runCleanupStep(() => video.removeAttribute?.("src"));
+  runCleanupStep(() => {
+    video.src = "";
+  });
+  runCleanupStep(() => video.load?.());
+  runCleanupStep(() => texture?.dispose?.());
+  return true;
+};
+
 const resolveVideoElement = ({ createVideoElement, documentRef }) => {
   if (typeof createVideoElement === "function") {
     return createVideoElement();
@@ -53,6 +85,7 @@ export function createProjectiveMediaSource({
 
   const listeners = new Set();
   const domListeners = new Map();
+  const releaseState = { released: false };
   let disposed = false;
   let status = "loading";
   let lastError = null;
@@ -95,36 +128,39 @@ export function createProjectiveMediaSource({
     error: (event) => setStatus("error", video.error || event?.error || event),
   };
 
-  for (const type of MEDIA_EVENT_TYPES) {
-    const handler = eventHandlers[type];
-    video.addEventListener?.(type, handler);
-    domListeners.set(type, handler);
-  }
-
-  video.crossOrigin = "anonymous";
-  video.playsInline = true;
-  video.setAttribute?.("playsinline", "");
-  video.preload = "auto";
-  video.controls = false;
-  video.loop = Boolean(loop);
-  video.muted = Boolean(muted);
-  video.defaultMuted = Boolean(muted);
-  video.volume = clampProjectiveMediaUnitInterval(volume, 1);
-  video.src = resolvedUrl;
-
-  const texture = createTexture(video);
-  if (!texture?.isTexture) {
-    for (const [type, handler] of domListeners) {
-      video.removeEventListener?.(type, handler);
+  let texture = null;
+  try {
+    for (const type of MEDIA_EVENT_TYPES) {
+      const handler = eventHandlers[type];
+      domListeners.set(type, handler);
+      video.addEventListener?.(type, handler);
     }
-    throw new TypeError("The texture factory must return a texture");
+
+    video.crossOrigin = "anonymous";
+    video.playsInline = true;
+    video.setAttribute?.("playsinline", "");
+    video.preload = "auto";
+    video.controls = false;
+    video.loop = Boolean(loop);
+    video.muted = Boolean(muted);
+    video.defaultMuted = Boolean(muted);
+    video.volume = clampProjectiveMediaUnitInterval(volume, 1);
+    video.src = resolvedUrl;
+
+    texture = createTexture(video);
+    if (!texture?.isTexture) {
+      throw new TypeError("The texture factory must return a texture");
+    }
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+  } catch (error) {
+    releaseConfiguredVideo({ video, domListeners, texture, releaseState });
+    throw error;
   }
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.generateMipmaps = false;
-  texture.minFilter = THREE.LinearFilter;
-  texture.magFilter = THREE.LinearFilter;
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
 
   const play = async () => {
     if (disposed) {
@@ -215,28 +251,7 @@ export function createProjectiveMediaSource({
     if (disposed) return false;
     disposed = true;
 
-    for (const [type, handler] of domListeners) {
-      video.removeEventListener?.(type, handler);
-    }
-    domListeners.clear();
-
-    try {
-      video.pause?.();
-    } catch {
-      // Releasing the remaining resources is still safe.
-    }
-    try {
-      video.removeAttribute?.("src");
-    } catch {
-      // Some test doubles expose src only as a property.
-    }
-    try {
-      video.load?.();
-    } catch {
-      // Loading an empty source is a best-effort release step.
-    }
-
-    texture.dispose();
+    releaseConfiguredVideo({ video, domListeners, texture, releaseState });
     status = "disposed";
     lastError = null;
     notify();

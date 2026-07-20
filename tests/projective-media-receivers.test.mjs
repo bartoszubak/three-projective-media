@@ -80,6 +80,9 @@ test("receiver roots bind multiple trees and deduplicate overlapping roots by me
   separateRoot.add(separateMesh);
 
   const projector = createProjectiveMediaProjector({ mediaSource });
+  assert.equal("setTarget" in projector, false);
+  assert.equal("getTarget" in projector, false);
+  assert.equal("targetBound" in projector.getStatus(), false);
   assert.equal(
     projector.setReceiverRoots([outerRoot, innerRoot, separateRoot, outerRoot]),
     2,
@@ -217,48 +220,6 @@ test("detachReceiverObject removes only one subtree without changing root config
 
   projector.dispose();
   disposeMeshResources(firstRemoved, secondRemoved, retained, replacement);
-});
-
-test("setTarget retains single-target compatibility without taking over explicit receivers", () => {
-  const mediaSource = createMediaSourceDouble();
-  const firstRoot = new THREE.Group();
-  const secondRoot = new THREE.Group();
-  const first = createMesh({ name: "first" });
-  const second = createMesh({ name: "second" });
-  const explicit = createMesh({ name: "explicit" });
-  firstRoot.add(first);
-  secondRoot.add(second);
-
-  const projector = createProjectiveMediaProjector({
-    target: firstRoot,
-    receivers: [explicit],
-    mediaSource,
-  });
-  assert.equal(projector.getTarget(), firstRoot);
-  assert.deepEqual(projector.getReceiverRoots(), [firstRoot]);
-  assert.deepEqual(
-    new Set(projector.getReceiverMeshes()),
-    new Set([first, explicit]),
-  );
-
-  projector.setReceiverRoots([secondRoot]);
-  assert.equal(projector.getTarget(), null);
-  assert.deepEqual(projector.getReceiverRoots(), [secondRoot]);
-  assert.deepEqual(
-    new Set(projector.getReceiverMeshes()),
-    new Set([second, explicit]),
-  );
-
-  assert.equal(projector.setTarget(firstRoot), 2);
-  assert.equal(projector.getTarget(), firstRoot);
-  assert.deepEqual(projector.getReceiverRoots(), [firstRoot]);
-  assert.equal(projector.setTarget(null), 1);
-  assert.equal(projector.getTarget(), null);
-  assert.deepEqual(projector.getReceiverRoots(), []);
-  assert.deepEqual(projector.getReceiverMeshes(), [explicit]);
-
-  projector.dispose();
-  disposeMeshResources(first, second, explicit);
 });
 
 test("receiverFilter receives root and material, rejects candidates, and isolates failures", () => {

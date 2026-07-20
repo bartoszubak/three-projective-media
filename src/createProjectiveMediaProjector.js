@@ -28,6 +28,45 @@ const notifyListeners = (listeners, payload) => {
   }
 };
 
+const runCleanupStep = (cleanup) => {
+  try {
+    cleanup();
+  } catch {
+    // Cleanup is best-effort so one failure cannot block later release steps.
+  }
+};
+
+const detachReceiverBindingsSafely = (receiverBindings) => {
+  for (const [sourceMesh, binding] of Array.from(receiverBindings)) {
+    const overlay = binding?.overlay || null;
+    const parentBeforeDetach = overlay?.parent || null;
+    receiverBindings.delete(sourceMesh);
+
+    runCleanupStep(() => overlay?.removeFromParent?.());
+    const fallbackParent = overlay?.parent || null;
+    if (fallbackParent) {
+      runCleanupStep(() => fallbackParent.remove?.(overlay));
+    } else if (parentBeforeDetach?.children?.includes?.(overlay)) {
+      runCleanupStep(() => parentBeforeDetach.remove?.(overlay));
+    }
+  }
+  receiverBindings.clear();
+};
+
+const rollbackProjectorConstruction = (
+  { source, camera, material, receiverBindings, unsubscribeMediaStatus },
+  { disposeMediaSource },
+) => {
+  detachReceiverBindingsSafely(receiverBindings);
+
+  runCleanupStep(() => unsubscribeMediaStatus?.());
+  runCleanupStep(() => material?.dispose?.());
+  runCleanupStep(() => camera?.removeFromParent?.());
+  if (disposeMediaSource) {
+    runCleanupStep(() => source?.dispose?.());
+  }
+};
+
 const isSupportedMesh = (object) =>
   Boolean(
     object?.isMesh &&
@@ -136,19 +175,21 @@ const isObjectOrDescendantOf = (object, ancestor) => {
   return false;
 };
 
-export function createProjectiveMediaProjector({
-  mediaUrl = null,
-  target = null,
-  receiverRoots = [],
-  receivers = [],
-  receiverFilter = null,
-  projector = {},
-  appearance = {},
-  media = {},
-  mediaSource = null,
-  mediaSourceFactory = createProjectiveMediaSource,
-  disposeMediaSource = true,
-} = {}) {
+const createProjectiveMediaProjectorInternal = (
+  {
+    mediaUrl = null,
+    receiverRoots = [],
+    receivers = [],
+    receiverFilter = null,
+    projector = {},
+    appearance = {},
+    media = {},
+    mediaSource = null,
+    mediaSourceFactory = createProjectiveMediaSource,
+    disposeMediaSource = true,
+  } = {},
+  constructionResources,
+) => {
   const source =
     mediaSource ||
     mediaSourceFactory({
@@ -157,6 +198,7 @@ export function createProjectiveMediaProjector({
       muted: media?.muted,
       volume: media?.volume,
     });
+  constructionResources.source = source;
   if (!source?.texture?.isTexture) {
     throw new TypeError("A media source with a texture is required");
   }
@@ -171,6 +213,7 @@ export function createProjectiveMediaProjector({
     cameraParameters.near,
     cameraParameters.far,
   );
+  constructionResources.camera = camera;
   camera.name = "ProjectiveMediaProjector";
   const initialPosition = readProjectiveMediaVector3(
     projector?.position,
@@ -193,8 +236,9 @@ export function createProjectiveMediaProjector({
     edgeFeather: appearance?.edgeFeather,
     blendMode: appearance?.blendMode,
   });
+  constructionResources.material = material;
   const statusListeners = new Set();
-  const receiverBindings = new Map();
+  const receiverBindings = constructionResources.receiverBindings;
   const explicitReceivers = new Set(
     normalizeObjectCollection(receivers, isSupportedMesh),
   );
@@ -207,17 +251,8 @@ export function createProjectiveMediaProjector({
   );
   let configuredReceiverFilter =
     typeof receiverFilter === "function" ? receiverFilter : null;
-  let compatibilityTarget = null;
-  let compatibilityTargetMode = false;
   let enabled = appearance?.enabled !== false;
   let disposed = false;
-
-  if (target?.isObject3D) {
-    configuredReceiverRoots = [target];
-    configuredReceiverFilter = null;
-    compatibilityTarget = target;
-    compatibilityTargetMode = true;
-  }
 
   const getVisibleReceiverCount = () => {
     let count = 0;
@@ -234,7 +269,6 @@ export function createProjectiveMediaProjector({
       opacity: material.uniforms.opacity.value,
       edgeFeather: material.uniforms.edgeFeather.value,
       blendMode: material.userData.projectiveMediaBlendMode,
-      targetBound: Boolean(compatibilityTargetMode && compatibilityTarget),
       receiverRootCount: configuredReceiverRoots.length,
       explicitReceiverCount: explicitReceivers.size,
       receiverMeshCount: receiverBindings.size,
@@ -252,6 +286,7 @@ export function createProjectiveMediaProjector({
     source.subscribe?.(() => {
       if (!disposed) emitStatus();
     }) || null;
+  constructionResources.unsubscribeMediaStatus = unsubscribeMediaStatus;
 
   const detachBinding = (sourceMesh) => {
     const binding = receiverBindings.get(sourceMesh);
@@ -259,12 +294,6 @@ export function createProjectiveMediaProjector({
     binding.overlay.removeFromParent();
     receiverBindings.delete(sourceMesh);
     return true;
-  };
-
-  const detachAllBindings = () => {
-    for (const sourceMesh of Array.from(receiverBindings.keys())) {
-      detachBinding(sourceMesh);
-    }
   };
 
   const collectDesiredReceivers = () => {
@@ -332,9 +361,15 @@ export function createProjectiveMediaProjector({
       let binding = receiverBindings.get(sourceMesh);
       if (!binding) {
         const overlay = createOverlayMesh(sourceMesh, material);
-        sourceMesh.add(overlay);
         binding = { source: sourceMesh, overlay };
         receiverBindings.set(sourceMesh, binding);
+        try {
+          sourceMesh.add(overlay);
+        } catch (error) {
+          receiverBindings.delete(sourceMesh);
+          runCleanupStep(() => overlay.removeFromParent());
+          throw error;
+        }
       }
       binding.overlay.frustumCulled = sourceMesh.frustumCulled;
       binding.overlay.renderOrder = Number(sourceMesh.renderOrder || 0) + 1;
@@ -352,15 +387,11 @@ export function createProjectiveMediaProjector({
       Boolean(object?.isObject3D),
     );
     configuredReceiverFilter = normalizeReceiverFilter(options);
-    compatibilityTarget = null;
-    compatibilityTargetMode = false;
     return refreshReceivers();
   };
 
   const addReceiverRoot = (root) => {
     if (disposed) return 0;
-    compatibilityTarget = null;
-    compatibilityTargetMode = false;
     if (root?.isObject3D && !configuredReceiverRoots.includes(root)) {
       configuredReceiverRoots.push(root);
     }
@@ -369,8 +400,6 @@ export function createProjectiveMediaProjector({
 
   const removeReceiverRoot = (root) => {
     if (disposed) return 0;
-    compatibilityTarget = null;
-    compatibilityTargetMode = false;
     configuredReceiverRoots = configuredReceiverRoots.filter(
       (candidate) => candidate !== root,
     );
@@ -380,8 +409,6 @@ export function createProjectiveMediaProjector({
   const clearReceiverRoots = () => {
     if (disposed) return 0;
     configuredReceiverRoots = [];
-    compatibilityTarget = null;
-    compatibilityTargetMode = false;
     return refreshReceivers();
   };
 
@@ -425,29 +452,6 @@ export function createProjectiveMediaProjector({
     }
     if (detachedCount > 0) emitStatus();
     return detachedCount;
-  };
-
-  const setTarget = (nextTarget = null) => {
-    if (disposed) return 0;
-    const normalizedTarget = nextTarget?.isObject3D ? nextTarget : null;
-
-    if (!normalizedTarget) {
-      if (!compatibilityTargetMode) return receiverBindings.size;
-      configuredReceiverRoots = [];
-      compatibilityTarget = null;
-      compatibilityTargetMode = false;
-      return refreshReceivers();
-    }
-
-    if (compatibilityTargetMode && compatibilityTarget === normalizedTarget) {
-      return receiverBindings.size;
-    }
-
-    configuredReceiverRoots = [normalizedTarget];
-    configuredReceiverFilter = null;
-    compatibilityTarget = normalizedTarget;
-    compatibilityTargetMode = true;
-    return refreshReceivers();
   };
 
   const setPose = (pose = {}) => {
@@ -499,14 +503,16 @@ export function createProjectiveMediaProjector({
   };
 
   const setMuted = (muted) => {
+    if (disposed) return false;
     const value = source.setMuted?.(muted);
-    if (!disposed) emitStatus();
+    emitStatus();
     return value;
   };
 
   const setVolume = (volume) => {
+    if (disposed) return null;
     const value = source.setVolume?.(volume);
-    if (!disposed) emitStatus();
+    emitStatus();
     return value;
   };
 
@@ -532,31 +538,40 @@ export function createProjectiveMediaProjector({
   };
 
   const play = async () => {
+    if (disposed) {
+      return {
+        ok: false,
+        status: "disposed",
+        error: null,
+      };
+    }
     const result = await source.play?.();
     if (!disposed) emitStatus();
     return result;
   };
 
   const pause = () => {
+    if (disposed) return false;
     const result = source.pause?.();
-    if (!disposed) emitStatus();
+    emitStatus();
     return result;
   };
 
   const dispose = () => {
     if (disposed) return false;
-    detachAllBindings();
+    disposed = true;
+
+    detachReceiverBindingsSafely(receiverBindings);
     configuredReceiverRoots = [];
     explicitReceivers.clear();
-    compatibilityTarget = null;
-    compatibilityTargetMode = false;
-    unsubscribeMediaStatus?.();
-    material.dispose();
-    if (disposeMediaSource) source.dispose?.();
-    camera.removeFromParent();
-    disposed = true;
-    emitStatus();
-    statusListeners.clear();
+    runCleanupStep(() => unsubscribeMediaStatus?.());
+    runCleanupStep(() => material.dispose());
+    if (disposeMediaSource) {
+      runCleanupStep(() => source.dispose?.());
+    }
+    runCleanupStep(() => camera.removeFromParent());
+    runCleanupStep(() => emitStatus());
+    runCleanupStep(() => statusListeners.clear());
     return true;
   };
 
@@ -573,9 +588,6 @@ export function createProjectiveMediaProjector({
         statusListeners.delete(listener);
       };
     },
-    getTarget() {
-      return compatibilityTargetMode ? compatibilityTarget : null;
-    },
     getReceiverRoots() {
       return [...configuredReceiverRoots];
     },
@@ -585,7 +597,6 @@ export function createProjectiveMediaProjector({
     getOverlayMeshes() {
       return Array.from(receiverBindings.values(), ({ overlay }) => overlay);
     },
-    setTarget,
     setReceiverRoots,
     addReceiverRoot,
     removeReceiverRoot,
@@ -613,6 +624,32 @@ export function createProjectiveMediaProjector({
   update();
   refreshReceivers();
   return api;
+};
+
+export function createProjectiveMediaProjector(options = {}) {
+  const constructionResources = {
+    source: null,
+    camera: null,
+    material: null,
+    receiverBindings: new Map(),
+    unsubscribeMediaStatus: null,
+  };
+  const disposeMediaSource =
+    options?.disposeMediaSource === undefined
+      ? true
+      : Boolean(options.disposeMediaSource);
+
+  try {
+    return createProjectiveMediaProjectorInternal(
+      options,
+      constructionResources,
+    );
+  } catch (error) {
+    rollbackProjectorConstruction(constructionResources, {
+      disposeMediaSource,
+    });
+    throw error;
+  }
 }
 
 export default createProjectiveMediaProjector;

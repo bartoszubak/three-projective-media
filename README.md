@@ -16,13 +16,33 @@ persistence, localization, asset resolution, or stores. Hosts own media URL
 resolution, authored records, receiver policy, UI, and lifecycle coordination.
 
 Package-owned tests are colocated under `tests/` and consume only the public
-source entry:
+source entry. Run them either from this directory or through the repository
+verification command:
 
 ```bash
-node --test \
-  packages/projective-media/tests/projective-media-package.test.mjs \
-  packages/projective-media/tests/projective-media-receivers.test.mjs
+npm test
+npm run verify:projective-media
 ```
+
+## Public API
+
+The package root exports:
+
+- `createProjectiveMediaSource()` for one owned video element and
+  `VideoTexture`;
+- `createProjectiveMediaMaterial()` plus the shader and blend-mode constants;
+- `createProjectiveMediaProjector()` for camera pose, appearance, receiver
+  bindings, playback, status, updates, and disposal;
+- `projectWorldPositionToProjectiveMedia()`,
+  `resolveProjectiveMediaEdgeFactor()`, and
+  `updateProjectiveMediaCamera()` as projector-space math helpers.
+
+The projector receiver surface is `setReceiverRoots`, `getReceiverRoots`,
+`addReceiverRoot`, `removeReceiverRoot`, `clearReceiverRoots`, `setReceivers`,
+`addReceiver`, `removeReceiver`, `clearReceivers`, `refreshReceivers`,
+`detachReceiverObject`, `getReceiverMeshes`, and `getOverlayMeshes`. Projector
+pose is supplied only through constructor projector parameters and `setPose()`;
+its `target` value is a look-at coordinate, not a receiver object.
 
 ## Aim and receivers
 
@@ -54,12 +74,6 @@ creation. A filter exception is isolated and rejects that candidate. The
 package never scans a global scene, observes mutations, or traverses roots in
 `update()`. Hosts explicitly refresh after their runtime objects change.
 
-`target`, `setTarget()`, and `getTarget()` remain compatibility APIs.
-`setTarget(object)` replaces receiver roots with one compatibility root;
-`setTarget(null)` clears that mode. `getTarget()` returns a root only while
-single-target compatibility mode is active. New integrations should use the
-receiver APIs.
-
 ## Projection and culling
 
 The shader maps world positions through the projector camera view-projection
@@ -88,8 +102,30 @@ default.
 `VideoTexture`; audio remains embedded in the video. Muted autoplay is the
 portable default, and rejected playback becomes a controlled status result.
 
+Construction is transactional. If media-texture creation fails or returns an
+invalid texture, source creation removes installed DOM listeners, pauses and
+clears the video, reloads it, and disposes any partial texture before
+rethrowing the original error. If projector construction fails after acquiring
+a source, it detaches partial overlays and camera ownership, disposes its
+partial shader material, and disposes the source only when the projector owns
+that source.
+
 Call `update()` from the host render loop, refresh receivers only after
 host-owned lifecycle changes, and call `dispose()` at teardown. Disposal is
 idempotent: it removes overlays/listeners and releases the owned shader,
 texture, camera, and media resources without disposing source geometry or
-materials. Subscriber failures are isolated from state changes and teardown.
+materials. Runtime disposal is best-effort across individual cleanup callbacks:
+a failing host unsubscribe or owned media-source disposal does not prevent the
+projector from entering its final disposed state or releasing the remaining
+owned resources. Subscriber failures are isolated from state changes and
+teardown.
+
+## Extraction readiness
+
+The package is source-consumable and self-contained around its manifest,
+README, public `src/index.js` surface, source modules, and colocated tests. Its
+tests resolve paths from `import.meta.url`, import the package only through the
+public entry, and require no repository-level product fixtures. The package
+remains private and intentionally has no nested lockfile, workspace wiring,
+build output, publish automation, or standalone sandbox; those are deferred to
+the external-repository extraction step.
