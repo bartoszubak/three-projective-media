@@ -17,12 +17,15 @@ Projector pose and receiver selection are independent. A host supplies a
 world-space position and look-at point, then explicitly registers receiver
 roots or meshes. The package never scans a global scene.
 
+![Projector Space standalone sandbox](docs/media/projector-space-sandbox.webp)
+
 ## Status
 
-This repository is preparing the `0.1.0` pre-release. The source-ESM API and
-package-owned tests are available for review, but the package is not yet
-published to npm, tagged, released, or described as stable. There is no live
-demo or production-support commitment yet.
+This repository is preparing the `0.1.0` pre-release. The source-ESM API,
+package-owned tests, and standalone sandbox are available for review, but the
+package is not yet published to npm, tagged, released, or described as stable.
+The Pages deployment is prepared but not yet confirmed live, and there is no
+production-support commitment yet.
 
 ## Why not start with a sandbox?
 
@@ -33,8 +36,8 @@ where receivers are created and replaced dynamically, media playback can be
 blocked, authored state is persisted, and editor interactions compete for
 camera and pointer input.
 
-The later standalone sandbox will demonstrate portability. It was deliberately
-not used as the primary environment for discovering the library boundary.
+The later standalone sandbox demonstrates portability. It was deliberately not
+used as the primary environment for discovering the library boundary.
 
 ## Garden Planner as a validation host
 
@@ -57,10 +60,51 @@ of the library. It remains the reference integration, while this extracted
 runtime contains no Garden Planner domain, UI, persistence, asset catalog, or
 asset-resolution logic.
 
+## Development chronology
+
+| Date | Validation checkpoint | Public result |
+|---|---|---|
+| July 18 | first application integration | source and material ownership |
+| July 19 | dynamic receivers and persistence | receiver-root lifecycle |
+| July 20 | free world-space authoring | pose independent from receivers |
+| July 21 | extraction hardening | standalone tests and safe disposal |
+
+The full environment → failure → consequence → evidence progression is recorded
+in the [validation timeline](docs/VALIDATION_TIMELINE.md).
+
+## Why the Git history starts here
+
+The public Git history is path-scoped. History-preserving extraction retained
+only commits that touched the neutral package prefix; the private validation
+host and its product-owned source were intentionally not published. The short
+log therefore describes the emergence of this reusable boundary, not every
+iteration that led to it.
+
+The application-scale chronology and technical outcomes are documented through
+public tests, the validation timeline, and the standalone sandbox. The earlier
+private history was not reconstructed, redated, or replaced with artificial
+presentation commits. See the
+[extraction provenance](docs/EXTRACTION_PROVENANCE.md) for the exact method.
+
+## Key engineering decisions
+
+| Decision | Reason |
+|---|---|
+| explicit receiver registration | no global scene scanning |
+| pose independent from receivers | projector is not anchored to host objects |
+| host-owned media replacement | unrelated media need distinct sessions |
+| transactional construction | partial resources must not leak |
+| best-effort disposal | one callback must not block teardown |
+| host-owned UI and persistence | neutral runtime stays reusable |
+| application-scale validation first | expose failure modes before abstraction |
+
+Development responsibilities and review evidence are summarized in the
+[OpenAI Build Week development notes](docs/BUILD_WEEK.md).
+
 ## Installation — pre-release
 
-The package is not available from the npm registry yet. After the first commit
-is reviewed and pushed, it can be installed directly from GitHub by replacing
+The package is not available from the npm registry yet. After these changes are
+reviewed and pushed, it can be installed directly from GitHub by replacing
 `<commit-sha>` with an exact reviewed commit:
 
 ```bash
@@ -223,13 +267,73 @@ npm test
 npm run verify
 ```
 
-`npm run verify` runs the full test suite and a dry-run package inspection. The
-reference integration continues to validate dynamic receivers, media
-replacement, persistence, public read-only playback, and editor lifecycle at
-application scale. See the
+`npm run verify` runs the full test suite, verifies and builds the standalone
+demo, and performs a dry-run package inspection. The reference integration
+continues to validate dynamic receivers, media replacement, persistence,
+public read-only playback, and editor lifecycle at application scale. See the
 [validation strategy](https://github.com/bartoszubak/three-projective-media/blob/main/docs/VALIDATION_STRATEGY.md)
 and
 [extraction provenance](https://github.com/bartoszubak/three-projective-media/blob/main/docs/EXTRACTION_PROVENANCE.md).
+
+## Standalone sandbox
+
+The laboratory sandbox is a second, deliberately small host. It imports only
+the `three-projective-media` package root and demonstrates projector pose,
+explicit receivers, media controls, frustum diagnostics, and a dynamic receiver
+rebuild. It is portability evidence and executable API documentation; it does
+not replace the application-scale validation that exposed the lifecycle and
+ownership requirements.
+
+Run it locally with Node 24.18.0:
+
+```bash
+npm ci
+npm run dev
+```
+
+Create and preview the production build:
+
+```bash
+npm run build:demo
+npm run preview:demo
+```
+
+The demo uses one local, procedurally generated video. Inactive media are not
+preloaded, no media catalog is bundled, and the sandbox does not import package
+internals.
+
+## Live sandbox
+
+Expected Pages URL after the first verified deployment:
+
+<https://bartoszubak.github.io/three-projective-media/>
+
+This URL is not claimed as active yet. After the automation changes are pushed,
+select **Settings → Pages → Build and deployment → Source: GitHub Actions**, wait
+for a green Pages workflow, and run the live smoke checklist.
+
+## Supported and validated platforms
+
+Validated during this checkpoint:
+
+- current Chrome on macOS;
+- Node 24.18.0;
+- npm 11.16.0;
+- Three.js 0.185.x.
+
+Runtime requirements are a modern browser, a native-ESM-aware build system,
+`HTMLVideoElement`, and a WebGL-capable Three.js runtime. Safari and Firefox are
+not yet claimed as validated.
+
+## Build Week development process
+
+Codex supported repository audits, implementation, tests, browser smoke,
+extraction, and CI preparation. GPT-5.6 supported architecture analysis,
+failure-mode review, acceptance-criteria design, and review of the reusable
+boundary. The human author retained product decisions, UX direction,
+architectural judgment, and manual acceptance. The detailed division of work
+and submission checklist are in [docs/BUILD_WEEK.md](docs/BUILD_WEEK.md); no
+runtime dependency on either tool is introduced.
 
 ## License
 
