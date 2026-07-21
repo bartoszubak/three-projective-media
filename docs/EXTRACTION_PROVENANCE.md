@@ -2,7 +2,7 @@
 
 ## Source
 
-- Source repository: `bartoszubak/island_`
+- Source repository: `bartoszubak/island_` (private validation-host repository)
 - Source branch: `feature/garden-projection-lighting`
 - Source commit: `f328f7c8efc685b82a04d62608c00e1d5ec43a16`
 - Source prefix: `packages/projective-media`
@@ -20,6 +20,25 @@ No code outside `packages/projective-media` was copied into the extracted
 history. In particular, no Garden Planner product source, UI, persistence,
 asset catalog, media file, or authoring implementation was copied.
 
+## Why the extracted Git history is intentionally shorter
+
+`git subtree split` retained only commits that changed
+`packages/projective-media`. Earlier validation also changed product-owned
+runtime coordination, persistence, publishing, receiver policy, editor
+interactions, and UI outside that prefix. Those private commits and the private
+product source are intentionally not part of this public repository.
+
+Their technical consequences are documented without reproducing the private
+implementation in the [validation strategy](./VALIDATION_STRATEGY.md), the
+[validation timeline](./VALIDATION_TIMELINE.md), the package-owned public tests,
+and the standalone public-API sandbox. The shorter Git log is
+therefore the history of the neutral package boundary, not a reconstruction of
+the entire development process.
+
+The three path-scoped commit messages produced by the extraction were retained
+as-is. They were not rewritten, redated, or replaced with artificial commits
+for presentation purposes.
+
 ## Standalone bootstrap additions
 
 The following repository-level material was added only after the history split
@@ -33,6 +52,11 @@ and fidelity check:
 - public README updates;
 - `docs/VALIDATION_STRATEGY.md`;
 - this provenance document.
+
+Subsequent public-validation work added the standalone sandbox, public
+validation timeline, Build Week notes, release checklist, changelog, and
+automation configuration. Those additions were made in this standalone
+repository and do not alter the extracted source history.
 
 The source modules and public export surface were intentionally left unchanged
 during this checkpoint.

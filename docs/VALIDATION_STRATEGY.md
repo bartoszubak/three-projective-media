@@ -13,6 +13,9 @@ architectural boundary of the library. This application-scale validation made
 the reusable boundary observable under real application constraints before the
 package was extracted.
 
+The dated progression from integration failures to public contracts is recorded
+in the [validation timeline](./VALIDATION_TIMELINE.md).
+
 ## Failure classes exercised by the reference integration
 
 The reference integration exercised behavior that a static scene would not:
@@ -37,6 +40,17 @@ These cases shaped explicit receiver registration, diff-based refresh,
 resource-ownership options, isolated subscribers, controlled media status,
 transactional construction, best-effort disposal, and the separation between
 projector pose and receiver selection.
+
+## Failure-to-contract evidence
+
+| Failure class | Public API consequence | Public evidence |
+|---|---|---|
+| texture construction failure | transactional source cleanup | [source tests](../tests/projective-media-source.test.mjs) |
+| partial projector creation | ownership-aware rollback | [projector tests](../tests/projective-media-projector.test.mjs) |
+| receiver rebuild | refresh and detach without media replacement | [receiver tests](../tests/projective-media-receivers.test.mjs) |
+| overlapping roots | identity deduplication | [receiver tests](../tests/projective-media-receivers.test.mjs) |
+| throwing teardown callback | best-effort, idempotent disposal | [projector tests](../tests/projective-media-projector.test.mjs) |
+| pose changes | stable media source, texture, and timeline | [receiver tests](../tests/projective-media-receivers.test.mjs) and [projector tests](../tests/projective-media-projector.test.mjs) |
 
 ## Responsibilities that remain with Garden Planner
 
@@ -72,11 +86,13 @@ The package imports only `three` and its own sibling modules. It has no product
 domain, UI framework, router, persistence, localization, store, or asset
 resolver dependency.
 
-## Why a standalone sandbox comes later
+## Why the standalone sandbox follows application-scale validation
 
-A standalone sandbox is still valuable. It will demonstrate that a second,
-small host can integrate the public entrypoint without Garden Planner code and
-will make the projection model easier to inspect visually.
+The standalone sandbox is a second, deliberately small host. It imports the
+`three-projective-media` package root rather than internal source modules, so it
+exercises the same public `exports` contract available to other consumers. It
+also makes the projection model and dynamic receiver lifecycle easier to
+inspect visually without importing Garden Planner code.
 
 Its role is portability evidence, documentation, and experimentation—not the
 primary environment for discovering ownership and lifecycle requirements. The
