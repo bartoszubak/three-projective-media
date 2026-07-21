@@ -60,6 +60,8 @@ including:
 - [Extraction provenance](./EXTRACTION_PROVENANCE.md)
 - [Package-owned tests](../tests/)
 - [Standalone sandbox source](../examples/basic/)
+- [Nocturne Garden — live Garden Planner reference integration](https://playzafiro.com/garden-planner/p/nocturne-garden)
+- [Nocturne Garden reference screenshot](./media/nocturne-garden-reference.webp)
 
 ## Submission checklist
 

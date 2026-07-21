@@ -16,6 +16,22 @@ package was extracted.
 The dated progression from integration failures to public contracts is recorded
 in the [validation timeline](./VALIDATION_TIMELINE.md).
 
+## Live application-scale reference integration
+
+[Nocturne Garden](https://playzafiro.com/garden-planner/p/nocturne-garden)
+is the published Garden Planner reference scene for `three-projective-media`.
+
+It demonstrates the same neutral runtime inside product-owned persistence,
+publishing, asset resolution, authored projector controls, receiver policy, and
+a read-only public presentation. The scene is not a second package sandbox: it
+is evidence that the extracted boundary remains usable inside the larger
+application workflow that originally exposed its lifecycle and ownership
+requirements.
+
+The standalone Projector Space sandbox remains the smaller portability host and
+executable API documentation. A screenshot of the live reference scene is
+included in the main repository README.
+
 ## Failure classes exercised by the reference integration
 
 The reference integration exercised behavior that a static scene would not:

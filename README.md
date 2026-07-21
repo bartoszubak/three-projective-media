@@ -25,8 +25,18 @@ This repository is preparing the `0.1.0` pre-release. The source-ESM API,
 package-owned tests, and standalone sandbox are available for review. The live
 sandbox is deployed through GitHub Pages.
 
-The package is not yet published to npm, tagged, released, or described as
-stable, and there is no production-support commitment yet.
+The package is not yet published to npm or described as stable, and there is
+no production-support commitment yet. Distribution remains pre-release, and
+consumers should pin an exact reviewed commit.
+
+Public demonstrations:
+
+- [Standalone sandbox](https://bartoszubak.github.io/three-projective-media/) —
+  a small host demonstrating the public API, media controls, projector pose,
+  and dynamic receiver lifecycle.
+- [Nocturne Garden](https://playzafiro.com/garden-planner/p/nocturne-garden) —
+  a published Garden Planner scene demonstrating the package in its
+  application-scale reference integration.
 
 ## Why not start with a sandbox?
 
@@ -60,6 +70,29 @@ Garden Planner was used as a validation host, not as the architectural boundary
 of the library. It remains the reference integration, while this extracted
 runtime contains no Garden Planner domain, UI, persistence, asset catalog, or
 asset-resolution logic.
+
+## Live reference integration
+
+[Nocturne Garden](https://playzafiro.com/garden-planner/p/nocturne-garden)
+is a published Garden Planner scene demonstrating `three-projective-media`
+inside the application that originally served as its validation host.
+
+[![Nocturne Garden — published Garden Planner reference integration](docs/media/nocturne-garden-reference.webp)](https://playzafiro.com/garden-planner/p/nocturne-garden)
+
+*Nocturne Garden places the projective-media runtime inside Garden Planner's
+persisted, published, read-only scene workflow.*
+
+The scene exercises the reusable runtime through a full product workflow:
+authored world-space projector pose, product-owned media selection and asset
+resolution, dynamic receiver lifecycle, project persistence, publishing, and
+read-only public playback with host-managed projection and sound controls.
+
+The [standalone sandbox](https://bartoszubak.github.io/three-projective-media/)
+is the portability and public-API demonstration. Nocturne Garden is the
+application-scale reference integration. Garden Planner continues to own domain
+state, persistence, UI, media catalogs, asset resolution, and receiver policy;
+the package continues to own projective-media rendering, browser media
+resources, receiver overlays, and lifecycle cleanup.
 
 ## Development chronology
 
