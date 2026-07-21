@@ -1,131 +1,236 @@
-# three-projective-media
+# Projector Space
 
-`three-projective-media` is a host-neutral Three.js package for projecting one
-HTML video texture onto host-selected mesh geometry in projector space.
+`three-projective-media`
 
-## Consumption and ownership
+Projective media for Three.js, validated under real application constraints.
 
-The public source entry is `src/index.js`, also exposed as the package root.
-Repository hosts currently consume that source directly. There is deliberately
-no workspace, package build, lockfile, publish step, external repository, or
-standalone sandbox yet.
+> **Pre-release v0.1.0**
 
-The package depends only on `three`, its own modules, and browser media
-primitives. It does not import application or product modules, React, routing,
-persistence, localization, asset resolution, or stores. Hosts own media URL
-resolution, authored records, receiver policy, UI, and lifecycle coordination.
+## Overview
 
-Package-owned tests are colocated under `tests/` and consume only the public
-source entry. Run them either from this directory or through the repository
-verification command:
+`three-projective-media` projects one HTML video texture onto host-selected
+Three.js meshes in projector space. The package owns the projector camera,
+shader material, receiver overlays, video element, and `VideoTexture` while
+leaving scene policy, authored state, asset resolution, and UI to the host.
+
+Projector pose and receiver selection are independent. A host supplies a
+world-space position and look-at point, then explicitly registers receiver
+roots or meshes. The package never scans a global scene.
+
+## Status
+
+This repository is preparing the `0.1.0` pre-release. The source-ESM API and
+package-owned tests are available for review, but the package is not yet
+published to npm, tagged, released, or described as stable. There is no live
+demo or production-support commitment yet.
+
+## Why not start with a sandbox?
+
+A shader-only sandbox can demonstrate projected UV mapping, but it does not
+exercise the ownership and lifecycle failures that define a reusable runtime.
+The first integration was therefore developed inside a mature Three.js editor,
+where receivers are created and replaced dynamically, media playback can be
+blocked, authored state is persisted, and editor interactions compete for
+camera and pointer input.
+
+The later standalone sandbox will demonstrate portability. It was deliberately
+not used as the primary environment for discovering the library boundary.
+
+## Garden Planner as a validation host
+
+The first integration was intentionally developed inside Garden Planner rather
+than in an isolated demo. The purpose was not to make the library
+Garden Planner-specific. Garden Planner provided an environment complex enough
+to expose failure modes a synthetic sandbox would likely hide, including:
+
+- dynamic receiver creation, rebuilding, and removal;
+- ownership of video elements, textures, materials, and overlays;
+- transactional construction failure;
+- idempotent, best-effort teardown;
+- camera and authoring interaction conflicts;
+- persistence and public read-only sessions;
+- autoplay and audio state;
+- media-session replacement without corrupting authored projector state.
+
+Garden Planner was used as a validation host, not as the architectural boundary
+of the library. It remains the reference integration, while this extracted
+runtime contains no Garden Planner domain, UI, persistence, asset catalog, or
+asset-resolution logic.
+
+## Installation — pre-release
+
+The package is not available from the npm registry yet. After the first commit
+is reviewed and pushed, it can be installed directly from GitHub by replacing
+`<commit-sha>` with an exact reviewed commit:
 
 ```bash
-npm test
-npm run verify:projective-media
+npm install github:bartoszubak/three-projective-media#<commit-sha>
 ```
+
+Do not use the placeholder literally. Pinning an exact SHA is intentional while
+the API remains pre-release.
+
+## Minimal quick start
+
+```js
+import * as THREE from "three";
+import { createProjectiveMediaProjector } from "three-projective-media";
+
+const receiverRoot = new THREE.Group();
+scene.add(receiverRoot);
+
+const projector = createProjectiveMediaProjector({
+  mediaUrl: "/media/projection.mp4",
+  receiverRoots: [receiverRoot],
+  projector: {
+    position: new THREE.Vector3(0, 2, -5),
+    target: new THREE.Vector3(0, 1, 0),
+    up: new THREE.Vector3(0, 1, 0),
+    fovDeg: 45,
+    aspectRatio: 16 / 9,
+    near: 0.1,
+    far: 20,
+  },
+  appearance: {
+    enabled: true,
+    opacity: 0.8,
+    edgeFeather: 0.08,
+    blendMode: "additive",
+  },
+  media: {
+    muted: true,
+    loop: true,
+    volume: 0.8,
+  },
+});
+
+function render() {
+  projector.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(render);
+}
+
+render();
+
+// Call this when the host tears down the projection session.
+function stopProjection() {
+  projector.dispose();
+}
+```
+
+The host is responsible for placing physical meshes under `receiverRoot`,
+refreshing bindings after structural changes, and disposing the projector when
+the session ends.
 
 ## Public API
 
 The package root exports:
 
-- `createProjectiveMediaSource()` for one owned video element and
+- `createProjectiveMediaSource()` for one owned `HTMLVideoElement` and
   `VideoTexture`;
-- `createProjectiveMediaMaterial()` plus the shader and blend-mode constants;
-- `createProjectiveMediaProjector()` for camera pose, appearance, receiver
-  bindings, playback, status, updates, and disposal;
-- `projectWorldPositionToProjectiveMedia()`,
-  `resolveProjectiveMediaEdgeFactor()`, and
-  `updateProjectiveMediaCamera()` as projector-space math helpers.
+- `createProjectiveMediaMaterial()` and material update helpers;
+- `createProjectiveMediaProjector()` for camera pose, receiver bindings,
+  playback, status, frame updates, and disposal;
+- blend-mode, shader, and camera-default constants;
+- projector-space math, normalization, camera-pose, and matrix helpers.
 
-The projector receiver surface is `setReceiverRoots`, `getReceiverRoots`,
-`addReceiverRoot`, `removeReceiverRoot`, `clearReceiverRoots`, `setReceivers`,
-`addReceiver`, `removeReceiver`, `clearReceivers`, `refreshReceivers`,
-`detachReceiverObject`, `getReceiverMeshes`, and `getOverlayMeshes`. Projector
-pose is supplied only through constructor projector parameters and `setPose()`;
-its `target` value is a look-at coordinate, not a receiver object.
+The complete export surface is defined by [`src/index.js`](src/index.js). Hosts
+should import from `three-projective-media`, not internal source modules.
 
-## Aim and receivers
+## Receiver roots and explicit receivers
 
-Projector pose is independent from receiver selection. `setPose()` controls the
-camera position and look-at target; `setProjectorParameters()` controls FOV,
-aspect, near, and far without changing media or receivers.
+Receivers are always opt-in:
 
-Receivers are opt-in:
-
-- `setReceiverRoots(roots, { receiverFilter })` traverses only the supplied
+- `setReceiverRoots(roots, { receiverFilter })` traverses only supplied
   `Object3D` roots;
 - `addReceiverRoot`, `removeReceiverRoot`, and `clearReceiverRoots` mutate root
   configuration;
 - `setReceivers`, `addReceiver`, `removeReceiver`, and `clearReceivers` manage
   explicit meshes;
 - `refreshReceivers()` diffs current descendants;
-- `detachReceiverObject(object)` detaches bindings in one subtree without
-  removing configured roots;
-- `getReceiverRoots`, `getReceiverMeshes`, and `getOverlayMeshes` expose
-  read-only collection copies.
+- `detachReceiverObject(object)` detaches one subtree without removing root
+  configuration;
+- `getReceiverRoots`, `getReceiverMeshes`, and `getOverlayMeshes` return
+  collection copies.
 
 Overlapping roots and explicit receivers are deduplicated by source mesh
-identity, so a mesh has at most one overlay per projector. Refresh preserves
-valid bindings and the same media element, `VideoTexture`, audio state,
-playback position, fade state, camera pose, and FOV.
-
-The optional filter receives `{ object, root, material }` before overlay
-creation. A filter exception is isolated and rejects that candidate. The
-package never scans a global scene, observes mutations, or traverses roots in
-`update()`. Hosts explicitly refresh after their runtime objects change.
-
-## Projection and culling
-
-The shader maps world positions through the projector camera view-projection
-matrix. It rejects fragments outside projected UV/depth bounds and back-facing
-geometry, supports edge feather plus alpha/additive blending, uses depth test
-without depth writes, and applies polygon offset.
-
-`update()` builds a projector frustum and tests only existing receiver
-bindings. A valid source `boundingSphere` is copied and transformed to world
-space; overlays outside the frustum are hidden. Missing spheres use a safe
-visible fallback and are not computed or written by the package. This
-broad-phase reduces draw calls; it is not occlusion or a projector depth map.
+identity. The optional filter receives `{ object, root, material }`; an
+exception rejects only that candidate. The package does not observe mutations,
+scan a scene globally, or traverse receiver roots during `update()`.
 
 Supported receivers are ordinary `Mesh` objects with `BufferGeometry` and a
-position attribute. `SkinnedMesh`, `InstancedMesh`, invalid geometry, and
-projective overlay meshes are skipped. Source geometry and materials remain
-host-owned and are never disposed.
+position attribute. `SkinnedMesh`, `InstancedMesh`, invalid geometry, and the
+package's own overlay meshes are skipped.
 
-There is no occlusion, depth map, keystone correction, multi-projector edge
-blending, volumetric beam, post-processing, or visible frustum helper by
-default.
+## Media and resource ownership
 
-## Media and lifecycle
+By default, `createProjectiveMediaProjector()` owns the media source it creates.
+It also owns its projector camera, shader material, and receiver overlay
+objects. Source geometry, source materials, receiver roots, and host meshes
+remain host-owned and are never disposed by the package.
 
-`createProjectiveMediaSource` owns one inline `HTMLVideoElement` and one
-`VideoTexture`; audio remains embedded in the video. Muted autoplay is the
-portable default, and rejected playback becomes a controlled status result.
+Hosts may provide a media source and set `disposeMediaSource: false` to retain
+ownership. The projector will still unsubscribe its status listener and release
+its own material, camera attachment, and overlays.
 
-Construction is transactional. If media-texture creation fails or returns an
-invalid texture, source creation removes installed DOM listeners, pauses and
-clears the video, reloads it, and disposes any partial texture before
-rethrowing the original error. If projector construction fails after acquiring
-a source, it detaches partial overlays and camera ownership, disposes its
-partial shader material, and disposes the source only when the projector owns
-that source.
+## Lifecycle and refresh
 
-Call `update()` from the host render loop, refresh receivers only after
-host-owned lifecycle changes, and call `dispose()` at teardown. Disposal is
-idempotent: it removes overlays/listeners and releases the owned shader,
-texture, camera, and media resources without disposing source geometry or
-materials. Runtime disposal is best-effort across individual cleanup callbacks:
-a failing host unsubscribe or owned media-source disposal does not prevent the
-projector from entering its final disposed state or releasing the remaining
-owned resources. Subscriber failures are isolated from state changes and
-teardown.
+Construction is transactional. Partial video, texture, camera, shader, and
+overlay resources are released on failure while preserving the original error.
 
-## Extraction readiness
+Call `refreshReceivers()` only after host-owned object lifecycle changes.
+Refresh diffs bindings while preserving the media element, `VideoTexture`,
+audio state, playback position, camera pose, FOV, and valid overlays. Call
+`update()` once per render frame for matrix updates and broad-phase projector
+frustum culling; it iterates bindings rather than traversing roots.
 
-The package is source-consumable and self-contained around its manifest,
-README, public `src/index.js` surface, source modules, and colocated tests. Its
-tests resolve paths from `import.meta.url`, import the package only through the
-public entry, and require no repository-level product fixtures. The package
-remains private and intentionally has no nested lockfile, workspace wiring,
-build output, publish automation, or standalone sandbox; those are deferred to
-the external-repository extraction step.
+`dispose()` is idempotent and best-effort. One failing host unsubscribe,
+overlay detach, material cleanup, or owned media-source disposal does not block
+remaining cleanup or the final disposed state. Subscriber failures are isolated
+from state changes and teardown.
+
+## Autoplay and audio
+
+Muted autoplay is the portable default. Playback rejection becomes a
+controlled status result rather than an unhandled exception. Audio stays
+embedded in the source video and can be managed through projector controls
+without replacing the media session.
+
+Different media URLs should be represented by different media sessions at the
+host level. The package does not attempt to transfer playback time between
+unrelated videos.
+
+## Current limitations
+
+The package currently provides no projector depth map, scene occlusion,
+keystone correction, `SkinnedMesh` or `InstancedMesh` receivers, alpha-card
+mask inheritance, volumetric beam, post-processing, visible frustum helper,
+multi-projector edge blending, media catalog, upload UI, authoring gizmos, or
+global scene discovery.
+
+Broad-phase frustum culling reduces overlay draw calls; fragment-level
+projector bounds remain the exact mapping test. Missing geometry bounding
+spheres use a safe visible fallback and are not computed or mutated.
+
+## Validation and tests
+
+Package-owned tests live in `tests/` and import only the public source entry.
+Use Node 24.18.0:
+
+```bash
+npm ci
+npm test
+npm run verify
+```
+
+`npm run verify` runs the full test suite and a dry-run package inspection. The
+reference integration continues to validate dynamic receivers, media
+replacement, persistence, public read-only playback, and editor lifecycle at
+application scale. See the
+[validation strategy](https://github.com/bartoszubak/three-projective-media/blob/main/docs/VALIDATION_STRATEGY.md)
+and
+[extraction provenance](https://github.com/bartoszubak/three-projective-media/blob/main/docs/EXTRACTION_PROVENANCE.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
