@@ -67,11 +67,26 @@ test("projective-media package exposes the declared neutral package boundary", (
   );
 
   assert.equal(manifest.name, "three-projective-media");
-  assert.equal(manifest.private, true);
+  assert.equal(manifest.version, "0.1.0");
+  assert.notEqual(manifest.private, true);
   assert.equal(manifest.type, "module");
   assert.equal(manifest.exports?.["."], "./src/index.js");
+  for (const publishedPath of ["src", "README.md", "LICENSE"]) {
+    assert.ok(manifest.files?.includes(publishedPath), publishedPath);
+  }
+  assert.equal(manifest.license, "MIT");
+  assert.equal(manifest.repository?.type, "git");
+  assert.equal(
+    manifest.repository?.url,
+    "git+https://github.com/bartoszubak/three-projective-media.git",
+  );
   assert.equal(manifest.peerDependencies?.three, ">=0.185.0 <0.186.0");
+  assert.equal(manifest.devDependencies?.three, "0.185.0");
   assert.equal(manifest.scripts?.test, "node --test tests/*.test.mjs");
+  assert.equal(
+    manifest.scripts?.verify,
+    "npm test && npm run pack:dry-run",
+  );
   assert.deepEqual(
     readdirSync(sourceDirectory)
       .filter((file) => file.endsWith(".js"))
