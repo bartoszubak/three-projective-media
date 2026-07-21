@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Projector Space standalone projective-media sandbox"
+    />
+    <link rel="icon" href="data:," />
+    <title>Projector Space</title>
+  </head>
+  <body>
+    <main class="sandbox-shell">
+      <div id="scene" class="scene" aria-label="Interactive projector scene"></div>
+
+      <aside class="control-panel" aria-label="Projector controls">
+        <details id="control-panel-details" open>
+          <summary>
+            <span>
+              <strong>Projector Space</strong>
+              <small>Standalone public-API sandbox</small>
+            </span>
+            <span class="summary-hint" aria-hidden="true">Controls</span>
+          </summary>
+
+          <div class="panel-content">
+            <header class="panel-header">
+              <p>
+                Project one video across explicit Three.js receivers, then
+                change pose and rebuild geometry without replacing the media.
+              </p>
+              <a
+                href="https://github.com/bartoszubak/three-projective-media"
+                target="_blank"
+                rel="noreferrer"
+              >
+                View repository
+              </a>
+            </header>
+
+            <section aria-labelledby="playback-heading">
+              <h2 id="playback-heading">Playback</h2>
+              <div class="button-row">
+                <button id="playback-toggle" type="button">Play</button>
+              </div>
+              <label class="toggle-control" for="projection-enabled">
+                <input id="projection-enabled" type="checkbox" checked />
+                <span>Projection enabled</span>
+              </label>
+              <label class="toggle-control" for="projection-muted">
+                <input id="projection-muted" type="checkbox" checked />
+                <span>Muted</span>
+              </label>
+              <label for="projection-volume">
+                <span>Volume</span>
+                <output id="projection-volume-output" for="projection-volume">0.65</output>
+              </label>
+              <input
+                id="projection-volume"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.65"
+              />
+            </section>
+
+            <section aria-labelledby="projection-heading">
+              <h2 id="projection-heading">Projection</h2>
+              <label for="projection-opacity">
+                <span>Opacity</span>
+                <output id="projection-opacity-output" for="projection-opacity">0.82</output>
+              </label>
+              <input
+                id="projection-opacity"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value="0.82"
+              />
+              <label for="projection-edge-feather">
+                <span>Edge feather</span>
+                <output id="projection-edge-feather-output" for="projection-edge-feather">0.08</output>
+              </label>
+              <input
+                id="projection-edge-feather"
+                type="range"
+                min="0"
+                max="0.5"
+                step="0.01"
+                value="0.08"
+              />
+              <label for="projection-blend-mode">Blend mode</label>
+              <select id="projection-blend-mode">
+                <option value="additive" selected>Additive</option>
+                <option value="alpha">Alpha</option>
+              </select>
+              <label for="projection-fov">
+                <span>Field of view</span>
+                <output id="projection-fov-output" for="projection-fov">43°</output>
+              </label>
+              <input
+                id="projection-fov"
+                type="range"
+                min="25"
+                max="75"
+                step="1"
+                value="43"
+              />
+            </section>
+
+            <section aria-labelledby="pose-heading">
+              <h2 id="pose-heading">Pose</h2>
+              <fieldset>
+                <legend>Projector position</legend>
+                <div class="coordinate-grid">
+                  <label for="projector-x">X</label>
+                  <input id="projector-x" type="number" step="0.1" value="0" />
+                  <label for="projector-y">Y</label>
+                  <input id="projector-y" type="number" step="0.1" value="2.4" />
+                  <label for="projector-z">Z</label>
+                  <input id="projector-z" type="number" step="0.1" value="5.8" />
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>Look-at target</legend>
+                <div class="coordinate-grid">
+                  <label for="target-x">X</label>
+                  <input id="target-x" type="number" step="0.1" value="0" />
+                  <label for="target-y">Y</label>
+                  <input id="target-y" type="number" step="0.1" value="1.6" />
+                  <label for="target-z">Z</label>
+                  <input id="target-z" type="number" step="0.1" value="-1.8" />
+                </div>
+              </fieldset>
+              <label class="toggle-control" for="projector-helper">
+                <input id="projector-helper" type="checkbox" />
+                <span>Show projector helper</span>
+              </label>
+            </section>
+
+            <section aria-labelledby="receiver-heading">
+              <h2 id="receiver-heading">Receiver lifecycle</h2>
+              <button id="rebuild-receiver" type="button">Rebuild receiver</button>
+              <p id="rebuild-result" class="inline-status" aria-live="polite">
+                Dynamic receiver ready.
+              </p>
+            </section>
+
+            <section aria-labelledby="status-heading">
+              <h2 id="status-heading">Status</h2>
+              <dl class="status-grid">
+                <div><dt>Media</dt><dd id="media-status">Loading</dd></div>
+                <div><dt>Current time</dt><dd id="current-time">0.00 s</dd></div>
+                <div><dt>Receiver roots</dt><dd id="receiver-root-count">0</dd></div>
+                <div><dt>Receiver meshes</dt><dd id="receiver-mesh-count">0</dd></div>
+                <div><dt>Visible receivers</dt><dd id="visible-receiver-count">0</dd></div>
+                <div><dt>Overlays</dt><dd id="overlay-count">0</dd></div>
+              </dl>
+            </section>
+
+            <button id="reset-demo" class="secondary-button" type="button">
+              Reset
+            </button>
+          </div>
+        </details>
+      </aside>
+
+      <div id="runtime-message" class="runtime-message" role="status" aria-live="polite">
+        Loading procedural media…
+      </div>
+    </main>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

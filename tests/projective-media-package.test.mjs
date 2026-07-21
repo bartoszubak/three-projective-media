@@ -82,10 +82,24 @@ test("projective-media package exposes the declared neutral package boundary", (
   );
   assert.equal(manifest.peerDependencies?.three, ">=0.185.0 <0.186.0");
   assert.equal(manifest.devDependencies?.three, "0.185.0");
+  assert.equal(manifest.devDependencies?.vite, "8.1.3");
+  assert.equal(manifest.scripts?.dev, "vite --config vite.config.js");
+  assert.equal(
+    manifest.scripts?.["build:demo"],
+    "vite build --config vite.config.js",
+  );
+  assert.equal(
+    manifest.scripts?.["preview:demo"],
+    "vite preview --config vite.config.js",
+  );
+  assert.equal(
+    manifest.scripts?.["verify:demo"],
+    "node scripts/verify-demo.mjs --static-only",
+  );
   assert.equal(manifest.scripts?.test, "node --test tests/*.test.mjs");
   assert.equal(
     manifest.scripts?.verify,
-    "npm test && npm run pack:dry-run",
+    "npm test && npm run verify:demo && npm run build:demo && node scripts/verify-demo.mjs --require-build",
   );
   assert.deepEqual(
     readdirSync(sourceDirectory)

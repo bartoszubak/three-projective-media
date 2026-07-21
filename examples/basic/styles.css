@@ -1,0 +1,351 @@
+:root {
+  color: #f4f6f2;
+  background: #080b0d;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#scene,
+.sandbox-shell {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  overflow: hidden;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+select,
+input[type="number"] {
+  min-height: 2.25rem;
+  border: 1px solid rgba(215, 230, 223, 0.22);
+  border-radius: 0.55rem;
+  color: #f6f8f4;
+  background: rgba(14, 22, 24, 0.82);
+}
+
+button {
+  padding: 0.55rem 0.78rem;
+  cursor: pointer;
+  font-weight: 680;
+}
+
+button:hover,
+select:hover,
+input[type="number"]:hover {
+  border-color: rgba(131, 220, 197, 0.62);
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+a:focus-visible {
+  outline: 2px solid #79e4c4;
+  outline-offset: 2px;
+}
+
+input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: #70d7b8;
+}
+
+input[type="range"] {
+  width: 100%;
+  margin: 0.35rem 0 0.8rem;
+  accent-color: #70d7b8;
+}
+
+input[type="number"],
+select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.42rem 0.55rem;
+}
+
+.sandbox-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+}
+
+.scene canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.control-panel {
+  position: absolute;
+  z-index: 2;
+  top: 1rem;
+  right: 1rem;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  border: 1px solid rgba(188, 218, 207, 0.16);
+  border-radius: 1rem;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgba(22, 31, 33, 0.95), rgba(8, 13, 15, 0.91));
+  box-shadow: 0 1.25rem 4rem rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(18px);
+}
+
+.control-panel details {
+  max-height: inherit;
+}
+
+.control-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+}
+
+.control-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.control-panel details[open] summary {
+  border-bottom-color: rgba(188, 218, 207, 0.12);
+}
+
+.control-panel summary strong,
+.control-panel summary small {
+  display: block;
+}
+
+.control-panel summary strong {
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.control-panel summary small,
+.summary-hint {
+  margin-top: 0.15rem;
+  color: #99aaa4;
+  font-size: 0.7rem;
+}
+
+.summary-hint {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.panel-content {
+  max-height: calc(100vh - 6.5rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 1rem 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(112, 215, 184, 0.35) transparent;
+}
+
+.panel-header {
+  padding: 0.85rem 0 0.2rem;
+}
+
+.panel-header p,
+.inline-status {
+  margin: 0;
+  color: #b9c6c1;
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.panel-header a {
+  display: inline-block;
+  margin-top: 0.55rem;
+  color: #7ee2c3;
+  font-size: 0.75rem;
+  text-underline-offset: 0.18rem;
+}
+
+section {
+  padding: 0.8rem 0;
+  border-top: 1px solid rgba(188, 218, 207, 0.1);
+}
+
+section h2 {
+  margin: 0 0 0.65rem;
+  color: #d8e2de;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.35rem 0;
+  color: #c5d0cc;
+  font-size: 0.74rem;
+}
+
+label output {
+  color: #7ee2c3;
+  font-variant-numeric: tabular-nums;
+}
+
+.toggle-control {
+  justify-content: flex-start;
+  cursor: pointer;
+}
+
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+fieldset {
+  min-width: 0;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: 0;
+}
+
+legend {
+  margin-bottom: 0.4rem;
+  color: #9eaaa6;
+  font-size: 0.68rem;
+}
+
+.coordinate-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.coordinate-grid label {
+  margin: 0;
+  color: #81908b;
+}
+
+.coordinate-grid input {
+  font-variant-numeric: tabular-nums;
+}
+
+.inline-status {
+  margin-top: 0.5rem;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.status-grid div {
+  min-width: 0;
+  padding: 0.55rem;
+  border: 1px solid rgba(188, 218, 207, 0.09);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.status-grid dt {
+  color: #7f8d88;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.status-grid dd {
+  margin: 0.2rem 0 0;
+  overflow: hidden;
+  color: #e8eeeb;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secondary-button {
+  width: 100%;
+  color: #b8c5c0;
+  background: transparent;
+}
+
+.runtime-message {
+  position: absolute;
+  z-index: 1;
+  left: 1rem;
+  bottom: 1rem;
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 0.65rem 0.85rem;
+  border: 1px solid rgba(188, 218, 207, 0.14);
+  border-radius: 999px;
+  color: #c5d0cc;
+  background: rgba(8, 13, 15, 0.78);
+  font-size: 0.72rem;
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .control-panel {
+    top: 0.65rem;
+    right: 0.65rem;
+    width: calc(100vw - 1.3rem);
+    max-height: min(74vh, 39rem);
+  }
+
+  .panel-content {
+    max-height: calc(min(74vh, 39rem) - 4rem);
+  }
+
+  .control-panel summary {
+    padding: 0.72rem 0.85rem;
+  }
+
+  .control-panel details:not([open]) summary {
+    border-bottom: 0;
+  }
+
+  .runtime-message {
+    left: 0.65rem;
+    bottom: 0.65rem;
+    max-width: calc(100vw - 1.3rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+}
