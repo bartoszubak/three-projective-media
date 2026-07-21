@@ -22,10 +22,11 @@ roots or meshes. The package never scans a global scene.
 ## Status
 
 This repository is preparing the `0.1.0` pre-release. The source-ESM API,
-package-owned tests, and standalone sandbox are available for review, but the
-package is not yet published to npm, tagged, released, or described as stable.
-The Pages deployment is prepared but not yet confirmed live, and there is no
-production-support commitment yet.
+package-owned tests, and standalone sandbox are available for review. The live
+sandbox is deployed through GitHub Pages.
+
+The package is not yet published to npm, tagged, released, or described as
+stable, and there is no production-support commitment yet.
 
 ## Why not start with a sandbox?
 
@@ -103,9 +104,8 @@ Development responsibilities and review evidence are summarized in the
 
 ## Installation — pre-release
 
-The package is not available from the npm registry yet. After these changes are
-reviewed and pushed, it can be installed directly from GitHub by replacing
-`<commit-sha>` with an exact reviewed commit:
+The package is not available from the npm registry yet. It can be installed
+directly from GitHub by replacing `<commit-sha>` with an exact reviewed commit:
 
 ```bash
 npm install github:bartoszubak/three-projective-media#<commit-sha>
@@ -304,13 +304,10 @@ internals.
 
 ## Live sandbox
 
-Expected Pages URL after the first verified deployment:
-
 <https://bartoszubak.github.io/three-projective-media/>
 
-This URL is not claimed as active yet. After the automation changes are pushed,
-select **Settings → Pages → Build and deployment → Source: GitHub Actions**, wait
-for a green Pages workflow, and run the live smoke checklist.
+The sandbox is built and deployed automatically from `main` through GitHub
+Actions.
 
 ## Supported and validated platforms
 
@@ -328,12 +325,14 @@ not yet claimed as validated.
 ## Build Week development process
 
 Codex supported repository audits, implementation, tests, browser smoke,
-extraction, and CI preparation. GPT-5.6 supported architecture analysis,
-failure-mode review, acceptance-criteria design, and review of the reusable
-boundary. The human author retained product decisions, UX direction,
-architectural judgment, and manual acceptance. The detailed division of work
-and submission checklist are in [docs/BUILD_WEEK.md](docs/BUILD_WEEK.md); no
-runtime dependency on either tool is introduced.
+extraction, and CI and GitHub Pages automation. GPT-5.6 supported architecture
+analysis, failure-mode review, acceptance-criteria design, and review of the
+reusable boundary. The human author retained product decisions, UX direction,
+architectural judgment, and manual acceptance.
+
+The detailed division of work and submission checklist are in
+[docs/BUILD_WEEK.md](docs/BUILD_WEEK.md); no runtime dependency on either tool
+is introduced.
 
 ## License
 
