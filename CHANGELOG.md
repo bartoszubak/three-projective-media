@@ -11,10 +11,12 @@
   status diagnostics.
 - Transactional construction rollback and idempotent, best-effort disposal.
 - Package-owned public tests and deterministic package-artifact verification.
-- Standalone laboratory sandbox with procedural demo media and a dynamic
-  receiver lifecycle.
+- Standalone laboratory sandbox with a four-source video showcase, host-owned
+  media-session replacement, and a dynamic receiver lifecycle.
+- Three author-recorded Terrain Studies, one procedural Abstract Color Field,
+  and media provenance and attribution documentation.
 - Public validation timeline, extraction provenance, Build Week notes, CI, and
-  GitHub Pages deployment preparation.
+  GitHub Pages deployment.
 
 ### Changed
 
@@ -43,5 +45,3 @@
   inheritance.
 - No media catalog, upload UI, authoring gizmos, or global scene discovery in
   the neutral package.
-- GitHub Pages remains inactive until the workflow is committed, pushed, and
-  selected as the repository's Pages source.

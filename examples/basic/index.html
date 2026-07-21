@@ -27,8 +27,9 @@
           <div class="panel-content">
             <header class="panel-header">
               <p>
-                Project one video across explicit Three.js receivers, then
-                change pose and rebuild geometry without replacing the media.
+                Project video across explicit Three.js receivers. Switch media
+                sources, adjust projector pose, and rebuild geometry while
+                preserving host-owned state.
               </p>
               <a
                 href="https://github.com/bartoszubak/three-projective-media"
@@ -41,6 +42,16 @@
 
             <section aria-labelledby="playback-heading">
               <h2 id="playback-heading">Playback</h2>
+              <label for="projection-video-source">Video source</label>
+              <select
+                id="projection-video-source"
+                data-projector-space-video-select
+                aria-describedby="projection-video-source-help"
+              ></select>
+              <p id="projection-video-source-help" class="control-help">
+                Switching video creates a new media session while preserving pose
+                and receivers.
+              </p>
               <div class="button-row">
                 <button id="playback-toggle" type="button">Play</button>
               </div>
@@ -152,6 +163,8 @@
             <section aria-labelledby="status-heading">
               <h2 id="status-heading">Status</h2>
               <dl class="status-grid">
+                <div><dt>Active video</dt><dd id="active-video">—</dd></div>
+                <div><dt>Session generation</dt><dd id="session-generation">0</dd></div>
                 <div><dt>Media</dt><dd id="media-status">Loading</dd></div>
                 <div><dt>Current time</dt><dd id="current-time">0.00 s</dd></div>
                 <div><dt>Receiver roots</dt><dd id="receiver-root-count">0</dd></div>
@@ -169,7 +182,7 @@
       </aside>
 
       <div id="runtime-message" class="runtime-message" role="status" aria-live="polite">
-        Loading procedural media…
+        Loading author-recorded media…
       </div>
     </main>
 

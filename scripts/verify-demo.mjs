@@ -13,24 +13,28 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  DEFAULT_DEMO_MEDIA_ID,
+  DEMO_MEDIA_CATALOG,
+  getDemoMediaOption,
+} from "../examples/basic/demoMediaCatalog.js";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageDirectory = path.resolve(scriptDirectory, "..");
 const demoDirectory = path.join(packageDirectory, "examples", "basic");
 const demoPublicDirectory = path.join(demoDirectory, "public");
-const demoMediaPath = path.join(
-  demoPublicDirectory,
-  "media",
-  "projector-space-demo.mp4",
+const demoMediaDirectory = path.join(demoPublicDirectory, "media");
+const demoMediaPaths = DEMO_MEDIA_CATALOG.map(({ url }) =>
+  path.join(demoPublicDirectory, url.replace(/^\.\//, "")),
 );
 const demoMediaReadmePath = path.join(
-  demoPublicDirectory,
-  "media",
+  demoMediaDirectory,
   "README.md",
 );
 const viteConfigPath = path.join(packageDirectory, "vite.config.js");
 const distDirectory = path.join(packageDirectory, "dist");
 const maxMediaBytes = 3 * 1024 * 1024;
+const maxTotalMediaBytes = 10 * 1024 * 1024;
 const requireBuild = process.argv.includes("--require-build");
 const staticOnly = process.argv.includes("--static-only");
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -39,9 +43,11 @@ const createTokenPattern = (tokens) =>
 const forbiddenHostPattern = createTokenPattern([
   ["Garden", "Planner"].join(""),
   ["Garden", " ", "Planner"].join(""),
-  ["Za", "firo"].join(""),
   ["projection", "Effects"].join(""),
   ["Public", "Asset", "Resolver"].join(""),
+]);
+const forbiddenRuntimeAttributionPattern = createTokenPattern([
+  ["Za", "firo"].join(""),
 ]);
 const forbiddenUiPattern = createTokenPattern([
   ["Re", "act"].join(""),
@@ -78,8 +84,44 @@ const verifyStaticDemoBoundary = async () => {
 
   assertFile(indexPath, "Demo HTML entry");
   assertFile(viteConfigPath, "Vite configuration");
-  assertFile(demoMediaPath, "Procedural demo media");
   assertFile(demoMediaReadmePath, "Demo media README");
+
+  assert.equal(DEMO_MEDIA_CATALOG.length, 4, "Demo catalog must have four entries");
+  assert.ok(Object.isFrozen(DEMO_MEDIA_CATALOG), "Demo catalog must be frozen");
+  assert.ok(
+    DEMO_MEDIA_CATALOG.every(Object.isFrozen),
+    "Every demo catalog entry must be frozen",
+  );
+  assert.equal(
+    DEMO_MEDIA_CATALOG.filter(({ origin }) => origin === "author-recorded")
+      .length,
+    3,
+    "Demo catalog must have three author-recorded entries",
+  );
+  assert.equal(
+    DEMO_MEDIA_CATALOG.filter(({ origin }) => origin === "procedural").length,
+    1,
+    "Demo catalog must have one procedural entry",
+  );
+  assert.equal(
+    new Set(DEMO_MEDIA_CATALOG.map(({ id }) => id)).size,
+    DEMO_MEDIA_CATALOG.length,
+    "Demo media ids must be unique",
+  );
+  assert.equal(
+    new Set(DEMO_MEDIA_CATALOG.map(({ url }) => url)).size,
+    DEMO_MEDIA_CATALOG.length,
+    "Demo media URLs must be unique",
+  );
+  assert.equal(
+    getDemoMediaOption(DEFAULT_DEMO_MEDIA_ID)?.origin,
+    "author-recorded",
+    "The default demo media must be author-recorded",
+  );
+  assert.ok(
+    DEMO_MEDIA_CATALOG.every(({ url }) => /^\.\/media\/[\w-]+\.mp4$/.test(url)),
+    "Demo media URLs must be relative MP4 paths",
+  );
 
   const demoTextFiles = collectFiles(demoDirectory).filter((filePath) =>
     /\.(?:css|html|js|json|md|mjs)$/i.test(filePath),
@@ -91,26 +133,49 @@ const verifyStaticDemoBoundary = async () => {
     relativePath: normalizePath(path.relative(packageDirectory, filePath)),
     source: readUtf8(filePath),
   }));
+  const runtimeNeutralPaths = new Set([
+    "examples/basic/main.js",
+    "examples/basic/demoMediaCatalog.js",
+    "examples/basic/index.html",
+    "examples/basic/styles.css",
+  ]);
   const javascriptSource = demoSources
     .filter(({ filePath }) => /\.(?:js|mjs)$/i.test(filePath))
     .map(({ source }) => source)
     .join("\n");
+  const catalogSource = readUtf8(path.join(demoDirectory, "demoMediaCatalog.js"));
+  assert.doesNotMatch(
+    catalogSource,
+    /\b(?:document|window|fetch|XMLHttpRequest)\b/,
+    "Demo media catalog must import without browser-only dependencies",
+  );
+  const mainSource = readUtf8(path.join(demoDirectory, "main.js"));
+  const resetSource = mainSource.match(
+    /const\s+resetDemo\s*=\s*\(\)\s*=>\s*\{[\s\S]*?\n\};\n\nlisten\(controlsById\.get\("reset-demo"\)/,
+  )?.[0];
+  assert.ok(resetSource, "Demo reset flow is missing");
+  assert.doesNotMatch(
+    resetSource,
+    /mediaId|switchDemoMedia|createProjectorSession/,
+    "Reset must not replace or change the active media session",
+  );
 
   assert.match(
     javascriptSource,
     /\bfrom\s+["']three-projective-media["']/,
     "Demo must import the package through its public self-reference",
   );
-  assert.match(
-    javascriptSource,
-    /["'`](?:\.\/)?media\/projector-space-demo\.mp4["'`]/,
-    "Demo must resolve the procedural video from its local public media path",
-  );
-  assert.doesNotMatch(
-    javascriptSource,
-    /["'`]\/media\/projector-space-demo\.mp4["'`]/,
-    "Demo media URL must remain relative for the Pages base path",
-  );
+  for (const { url } of DEMO_MEDIA_CATALOG) {
+    assert.ok(
+      javascriptSource.includes(url),
+      `Demo catalog omits ${url}`,
+    );
+    assert.ok(
+      !javascriptSource.includes(`"/${url.replace(/^\.\//, "")}"`) &&
+        !javascriptSource.includes(`'/${url.replace(/^\.\//, "")}'`),
+      `Demo media URL must remain relative: ${url}`,
+    );
+  }
 
   for (const { relativePath, source } of demoSources) {
     assert.doesNotMatch(
@@ -123,6 +188,13 @@ const verifyStaticDemoBoundary = async () => {
       forbiddenHostPattern,
       `${relativePath} contains host-product semantics`,
     );
+    if (runtimeNeutralPaths.has(relativePath)) {
+      assert.doesNotMatch(
+        source,
+        forbiddenRuntimeAttributionPattern,
+        `${relativePath} contains host attribution in runtime/UI source`,
+      );
+    }
     assert.doesNotMatch(
       source,
       forbiddenUiPattern,
@@ -135,36 +207,77 @@ const verifyStaticDemoBoundary = async () => {
     );
 
     for (const match of source.matchAll(/https?:\/\/[^\s"'<>`)]+/g)) {
-      assert.match(
-        match[0],
-        /^https:\/\/github\.com\/bartoszubak\/three-projective-media(?:[/?#]|$)/,
+      const isRepositoryUrl =
+        /^https:\/\/github\.com\/bartoszubak\/three-projective-media(?:[/?#]|$)/.test(
+          match[0],
+        );
+      const isMediaProvenanceUrl =
+        relativePath === "examples/basic/public/media/README.md" &&
+        match[0] === "https://playzafiro.com/isle-lab/";
+      assert.ok(
+        isRepositoryUrl || isMediaProvenanceUrl,
         `${relativePath} references an unexpected external URL: ${match[0]}`,
       );
     }
   }
 
-  const mediaStats = statSync(demoMediaPath);
-  assert.ok(mediaStats.size > 0, "Procedural demo media is empty");
+  const mediaReadme = readUtf8(demoMediaReadmePath);
+  assert.deepEqual(
+    readdirSync(demoMediaDirectory).sort(),
+    [
+      "README.md",
+      ...DEMO_MEDIA_CATALOG.map(({ url }) => path.basename(url)),
+    ].sort(),
+    "Public media directory must contain only the catalog and its README",
+  );
+  let totalMediaBytes = 0;
+  const mediaHashes = new Map();
+  for (const mediaPath of demoMediaPaths) {
+    assertFile(mediaPath, `Demo media ${path.basename(mediaPath)}`);
+    const mediaStats = statSync(mediaPath);
+    assert.ok(mediaStats.size > 0, `${path.basename(mediaPath)} is empty`);
+    assert.ok(
+      mediaStats.size < maxMediaBytes,
+      `${path.basename(mediaPath)} must remain below 3 MB`,
+    );
+    totalMediaBytes += mediaStats.size;
+    const mediaSha256 = createHash("sha256")
+      .update(readFileSync(mediaPath))
+      .digest("hex");
+    mediaHashes.set(path.basename(mediaPath), mediaSha256);
+    assert.ok(
+      mediaReadme.toLowerCase().includes(mediaSha256),
+      `Demo media README must contain ${path.basename(mediaPath)} SHA-256`,
+    );
+  }
   assert.ok(
-    mediaStats.size < maxMediaBytes,
-    `Procedural demo media must remain below 3 MB (${mediaStats.size} bytes)`,
+    totalMediaBytes < maxTotalMediaBytes,
+    `Combined demo media must remain below 10 MB (${totalMediaBytes} bytes)`,
   );
 
-  const mediaReadme = readUtf8(demoMediaReadmePath);
-  const mediaSha256 = createHash("sha256")
-    .update(readFileSync(demoMediaPath))
-    .digest("hex");
+  assert.match(mediaReadme, /Zafiro Isle Lab/);
+  assert.match(mediaReadme, /https:\/\/playzafiro\.com\/isle-lab\//);
+  assert.match(mediaReadme, /Bartek Bąk/);
+  assert.match(mediaReadme, /Copyright © 2026 Bartek Bąk/);
+  assert.match(mediaReadme, /screen recordings|captured and produced/i);
+  assert.match(mediaReadme, /provenance/i);
   assert.match(mediaReadme, /procedurally generated|procedural/i);
   assert.match(mediaReadme, /ffmpeg/i);
   assert.match(mediaReadme, /H\.264|h264/i);
   assert.match(mediaReadme, /640\s*[×x]\s*360/i);
   assert.match(mediaReadme, /30\s*(?:fps|frames per second)/i);
-  assert.match(mediaReadme, /third[- ]party/i);
-  assert.match(mediaReadme, /MIT/i);
-  assert.ok(
-    mediaReadme.toLowerCase().includes(mediaSha256),
-    "Demo media README must contain the current media SHA-256",
+  const terrainRights = mediaReadme.split("## Abstract Color Field")[0];
+  assert.doesNotMatch(terrainRights, /public domain|\bCC0\b|royalty free/i);
+  assert.doesNotMatch(
+    terrainRights,
+    /separate permission|redistribution prohibited|reuse outside this demo|not covered by (?:the )?MIT/i,
   );
+
+  const html = readUtf8(indexPath);
+  assert.match(html, /<label\s+for=["']projection-video-source["']/i);
+  assert.match(html, /<select[^>]+data-projector-space-video-select/i);
+  assert.doesNotMatch(html, /<video\b/i);
+  assert.doesNotMatch(html, /\bpreload\s*=/i);
 
   const configUrl = `${pathToFileURL(viteConfigPath).href}?verify-demo=${Date.now()}`;
   const configModule = await import(configUrl);
@@ -240,8 +353,8 @@ const verifyStaticDemoBoundary = async () => {
   );
 
   return {
-    mediaBytes: mediaStats.size,
-    mediaSha256,
+    mediaBytes: totalMediaBytes,
+    mediaHashes,
     sourceFileCount: demoSources.length,
   };
 };
@@ -249,18 +362,12 @@ const verifyStaticDemoBoundary = async () => {
 const verifyBuildOutput = () => {
   const indexPath = path.join(distDirectory, "index.html");
   const assetsDirectory = path.join(distDirectory, "assets");
-  const builtMediaPath = path.join(
-    distDirectory,
-    "media",
-    "projector-space-demo.mp4",
-  );
 
   assertFile(indexPath, "Built demo HTML");
   assert.ok(
     existsSync(assetsDirectory) && statSync(assetsDirectory).isDirectory(),
     "Built demo assets directory is missing",
   );
-  assertFile(builtMediaPath, "Built procedural demo media");
 
   const assetFiles = collectFiles(assetsDirectory);
   assert.ok(
@@ -279,27 +386,26 @@ const verifyBuildOutput = () => {
     .filter((filePath) => filePath.endsWith(".js"))
     .map(readUtf8)
     .join("\n");
-  assert.match(
-    builtJavascript,
-    /["'`](?:\.\/)?media\/projector-space-demo\.mp4["'`]/,
-    "Built demo must keep a relative public-media URL",
-  );
-  assert.doesNotMatch(
-    builtJavascript,
-    /["'`]\/media\/projector-space-demo\.mp4["'`]/,
-  );
-
-  const sourceMediaHash = createHash("sha256")
-    .update(readFileSync(demoMediaPath))
-    .digest("hex");
-  const builtMediaHash = createHash("sha256")
-    .update(readFileSync(builtMediaPath))
-    .digest("hex");
-  assert.equal(
-    builtMediaHash,
-    sourceMediaHash,
-    "Vite must copy demo media without modifying it",
-  );
+  for (const sourceMediaPath of demoMediaPaths) {
+    const fileName = path.basename(sourceMediaPath);
+    const builtMediaPath = path.join(distDirectory, "media", fileName);
+    assertFile(builtMediaPath, `Built demo media ${fileName}`);
+    assert.ok(
+      builtJavascript.includes(`./media/${fileName}`),
+      `Built demo must keep a relative URL for ${fileName}`,
+    );
+    const sourceMediaHash = createHash("sha256")
+      .update(readFileSync(sourceMediaPath))
+      .digest("hex");
+    const builtMediaHash = createHash("sha256")
+      .update(readFileSync(builtMediaPath))
+      .digest("hex");
+    assert.equal(
+      builtMediaHash,
+      sourceMediaHash,
+      `Vite must copy ${fileName} without modifying it`,
+    );
+  }
 
   for (const filePath of [indexPath, ...assetFiles].filter((entry) =>
     /\.(?:css|html|js|map)$/i.test(entry),
@@ -310,6 +416,11 @@ const verifyBuildOutput = () => {
       source,
       forbiddenHostPattern,
       `${relativePath} contains host-product data`,
+    );
+    assert.doesNotMatch(
+      source,
+      forbiddenRuntimeAttributionPattern,
+      `${relativePath} contains host attribution in built runtime/UI output`,
     );
     assert.doesNotMatch(
       source,
@@ -348,6 +459,7 @@ const verifyPackedArtifact = () => {
     const packedFiles = packReports[0].files.map(({ path: packedPath }) =>
       normalizePath(packedPath),
     );
+    assert.equal(packedFiles.length, 8, "Expected eight approved package files");
 
     for (const requiredPath of ["package.json", "README.md", "LICENSE"]) {
       assert.ok(
@@ -362,7 +474,7 @@ const verifyPackedArtifact = () => {
 
     const forbiddenPatterns = [
       /^(?:examples|tests|docs|scripts|dist)(?:\/|$)/,
-      /(?:^|\/)projector-space-demo\.mp4$/,
+      /(?:^|\/)[^/]+\.mp4$/,
       /(?:^|\/)package-lock\.json$/,
       /(?:^|\/)[^/]+\.tgz$/,
     ];

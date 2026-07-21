@@ -2,11 +2,21 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { createProjectiveMediaProjector } from "three-projective-media";
 
+import {
+  DEFAULT_DEMO_MEDIA_ID,
+  DEMO_MEDIA_CATALOG,
+  getDemoMediaOption,
+} from "./demoMediaCatalog.js";
 import "./styles.css";
 
 const sceneContainer = document.querySelector("#scene");
 const runtimeMessage = document.querySelector("#runtime-message");
 const rebuildResult = document.querySelector("#rebuild-result");
+const defaultMediaOption = getDemoMediaOption(DEFAULT_DEMO_MEDIA_ID);
+
+if (!defaultMediaOption) {
+  throw new Error("The default demo media option is missing");
+}
 
 const initialSettings = Object.freeze({
   enabled: true,
@@ -22,6 +32,7 @@ const initialSettings = Object.freeze({
 
 const settings = {
   ...initialSettings,
+  mediaId: defaultMediaOption.id,
   position: { ...initialSettings.position },
   target: { ...initialSettings.target },
 };
@@ -153,32 +164,47 @@ const createDynamicReceiverSubtree = () => {
 dynamicSubtree = createDynamicReceiverSubtree();
 receiverRoot.add(dynamicSubtree);
 
-const projector = createProjectiveMediaProjector({
-  mediaUrl: "./media/projector-space-demo.mp4",
-  receiverRoots: [receiverRoot],
-  projector: {
-    position: settings.position,
-    target: settings.target,
-    up: { x: 0, y: 1, z: 0 },
-    fovDeg: settings.fovDeg,
-    aspectRatio: 16 / 9,
-    near: 0.1,
-    far: 22,
-  },
-  appearance: {
-    enabled: settings.enabled,
-    opacity: settings.opacity,
-    edgeFeather: settings.edgeFeather,
-    blendMode: settings.blendMode,
-  },
-  media: {
-    loop: true,
-    muted: settings.muted,
-    volume: settings.volume,
-  },
+const createProjectorSession = (
+  mediaOption,
+  { receiverRoots = [], autoplay = true } = {},
+) => ({
+  autoplay,
+  projector: createProjectiveMediaProjector({
+    mediaUrl: mediaOption.url,
+    receiverRoots,
+    projector: {
+      position: settings.position,
+      target: settings.target,
+      up: { x: 0, y: 1, z: 0 },
+      fovDeg: settings.fovDeg,
+      aspectRatio: 16 / 9,
+      near: 0.1,
+      far: 22,
+    },
+    appearance: {
+      enabled: settings.enabled,
+      opacity: settings.opacity,
+      edgeFeather: settings.edgeFeather,
+      blendMode: settings.blendMode,
+    },
+    media: {
+      loop: true,
+      muted: settings.muted,
+      volume: settings.volume,
+    },
+  }),
 });
 
-const projectorHelper = new THREE.CameraHelper(projector.camera);
+const initialSession = createProjectorSession(defaultMediaOption, {
+  receiverRoots: [receiverRoot],
+});
+let projector = initialSession.projector;
+let activeMediaId = defaultMediaOption.id;
+let sessionGeneration = 1;
+let latestMediaSwitchReport = null;
+let mediaSwitchInFlight = false;
+
+let projectorHelper = new THREE.CameraHelper(projector.camera);
 projectorHelper.name = "HostOwnedProjectorHelper";
 projectorHelper.visible = false;
 scene.add(projectorHelper);
@@ -188,7 +214,18 @@ const controlsById = new Map(
     (element) => [element.id, element],
   ),
 );
+const mediaSelect = controlsById.get("projection-video-source");
+for (const option of DEMO_MEDIA_CATALOG) {
+  const optionElement = document.createElement("option");
+  optionElement.value = option.id;
+  optionElement.textContent = option.label;
+  mediaSelect.append(optionElement);
+}
+mediaSelect.value = activeMediaId;
+
 const statusElements = {
+  activeVideo: document.querySelector("#active-video"),
+  sessionGeneration: document.querySelector("#session-generation"),
   media: document.querySelector("#media-status"),
   currentTime: document.querySelector("#current-time"),
   receiverRootCount: document.querySelector("#receiver-root-count"),
@@ -226,6 +263,9 @@ const formatMediaStatus = (status) => {
 const renderStatus = (status = projector.getStatus()) => {
   latestProjectorStatus = status;
   const media = status.media || {};
+  statusElements.activeVideo.textContent =
+    getDemoMediaOption(activeMediaId)?.label || activeMediaId;
+  statusElements.sessionGeneration.textContent = String(sessionGeneration);
   statusElements.media.textContent = formatMediaStatus(media.status);
   statusElements.currentTime.textContent = `${Number(media.currentTime || 0).toFixed(2)} s`;
   statusElements.receiverRootCount.textContent = String(status.receiverRootCount);
@@ -236,11 +276,353 @@ const renderStatus = (status = projector.getStatus()) => {
     media.status === "playing" ? "Pause" : "Play";
 };
 
-const unsubscribeStatus = projector.subscribeStatus(renderStatus);
+let unsubscribeStatus = projector.subscribeStatus(renderStatus);
 renderStatus(latestProjectorStatus);
 
 const setRuntimeMessage = (message) => {
   runtimeMessage.textContent = message;
+};
+
+const vectorMatches = (vector, coordinates, tolerance = 1e-6) =>
+  ["x", "y", "z"].every(
+    (axis) => Math.abs(vector[axis] - coordinates[axis]) <= tolerance,
+  );
+
+const projectorPoseMatchesSettings = (candidateProjector) => {
+  const actualDirection = new THREE.Vector3();
+  candidateProjector.camera.getWorldDirection(actualDirection);
+  const expectedDirection = new THREE.Vector3(
+    settings.target.x - settings.position.x,
+    settings.target.y - settings.position.y,
+    settings.target.z - settings.position.z,
+  ).normalize();
+  return (
+    vectorMatches(candidateProjector.camera.position, settings.position) &&
+    actualDirection.distanceTo(expectedDirection) <= 1e-6
+  );
+};
+
+const projectorParametersMatchSettings = (candidateProjector) => {
+  const status = candidateProjector.getStatus();
+  const media = status.media || {};
+  return (
+    status.enabled === settings.enabled &&
+    Math.abs(status.opacity - settings.opacity) <= 1e-6 &&
+    Math.abs(status.edgeFeather - settings.edgeFeather) <= 1e-6 &&
+    status.blendMode === settings.blendMode &&
+    Math.abs(candidateProjector.camera.fov - settings.fovDeg) <= 1e-6 &&
+    media.muted === settings.muted &&
+    Math.abs(media.volume - settings.volume) <= 1e-6 &&
+    media.loop === true
+  );
+};
+
+const runSandboxCleanupStep = (cleanup, fallbackValue = false) => {
+  try {
+    return cleanup();
+  } catch {
+    return fallbackValue;
+  }
+};
+
+const rollbackCandidateSession = ({
+  candidateProjector,
+  candidateHelper,
+  candidateUnsubscribe,
+}) => ({
+  candidateUnsubscribed: runSandboxCleanupStep(() => {
+    candidateUnsubscribe?.();
+    return true;
+  }),
+  candidateHelperRemoved: runSandboxCleanupStep(() => {
+    candidateHelper?.removeFromParent();
+    return !candidateHelper?.parent;
+  }, !candidateHelper),
+  candidateHelperDisposed: runSandboxCleanupStep(() => {
+    candidateHelper?.dispose();
+    return true;
+  }, !candidateHelper),
+  candidateProjectorDisposed: runSandboxCleanupStep(
+    () => candidateProjector?.dispose() ?? true,
+    !candidateProjector,
+  ),
+});
+
+const switchDemoMedia = async (nextMediaId) => {
+  const nextMediaOption = getDemoMediaOption(nextMediaId);
+  if (!nextMediaOption || disposed || mediaSwitchInFlight) {
+    mediaSelect.value = activeMediaId;
+    return null;
+  }
+
+  const currentMediaOption = getDemoMediaOption(activeMediaId);
+  const previousTime = projector.mediaSource.video.currentTime;
+  if (nextMediaId === activeMediaId) {
+    latestMediaSwitchReport = Object.freeze({
+      fromMediaId: activeMediaId,
+      toMediaId: nextMediaId,
+      replaced: false,
+      oldProjectorDisposed: false,
+      oldMediaSourceDisposed: false,
+      oldVideoSourceCleared: false,
+      projectorReplaced: false,
+      mediaSourceReplaced: false,
+      videoElementReplaced: false,
+      textureReplaced: false,
+      receiverRootPreserved: true,
+      receiverMeshCountPreserved: true,
+      overlayCountPreserved: true,
+      posePreserved: true,
+      parametersPreserved: true,
+      helperVisibilityPreserved: true,
+      previousTime,
+      nextTime: previousTime,
+      timelineTransferred: false,
+    });
+    mediaSelect.value = activeMediaId;
+    setRuntimeMessage(`${currentMediaOption.label} is already active.`);
+    return latestMediaSwitchReport;
+  }
+
+  mediaSwitchInFlight = true;
+  mediaSelect.disabled = true;
+  const oldProjector = projector;
+  const oldMediaSource = oldProjector.mediaSource;
+  const oldVideoElement = oldMediaSource.video;
+  const oldTexture = oldMediaSource.texture;
+  const oldReceiverMeshes = oldProjector.getReceiverMeshes();
+  const oldReceiverCount = oldProjector.getStatus().receiverMeshCount;
+  const oldOverlayCount = oldProjector.getStatus().overlayCount;
+  const helperWasVisible = projectorHelper.visible;
+  const oldProjectorHelper = projectorHelper;
+  const oldUnsubscribeStatus = unsubscribeStatus;
+  const oldSessionGeneration = sessionGeneration;
+  const oldSettingsMediaId = settings.mediaId;
+  let candidateProjector = null;
+  let candidateHelper = null;
+  let candidateUnsubscribe = null;
+  let candidateStatus = null;
+  let candidateReceiverMeshes = [];
+  let candidatePlayResult = null;
+
+  // PREPARE: the current session remains active until every candidate resource
+  // and invariant required by the host has been prepared successfully.
+  try {
+    const candidateSession = createProjectorSession(nextMediaOption, {
+      receiverRoots: [],
+      autoplay: true,
+    });
+    candidateProjector = candidateSession.projector;
+    candidatePlayResult = candidateSession.autoplay
+      ? await candidateProjector.play()
+      : { ok: true, status: "paused" };
+
+    if (disposed) {
+      rollbackCandidateSession({
+        candidateProjector,
+        candidateHelper,
+        candidateUnsubscribe,
+      });
+      mediaSwitchInFlight = false;
+      mediaSelect.disabled = false;
+      return null;
+    }
+
+    candidateProjector.setReceiverRoots([receiverRoot]);
+    candidateHelper = new THREE.CameraHelper(candidateProjector.camera);
+    candidateHelper.name = "HostOwnedProjectorHelper";
+    candidateHelper.visible = helperWasVisible;
+    candidateHelper.update();
+    candidateUnsubscribe = candidateProjector.subscribeStatus((status) => {
+      if (!disposed && projector === candidateProjector) renderStatus(status);
+    });
+    candidateStatus = candidateProjector.getStatus();
+    candidateReceiverMeshes = candidateProjector.getReceiverMeshes();
+
+    const candidateIsValid =
+      projectorPoseMatchesSettings(candidateProjector) &&
+      projectorParametersMatchSettings(candidateProjector) &&
+      candidateProjector.getReceiverRoots()[0] === receiverRoot &&
+      candidateStatus.receiverRootCount === 1 &&
+      candidateStatus.receiverMeshCount === oldReceiverCount &&
+      candidateStatus.overlayCount === oldOverlayCount &&
+      oldReceiverMeshes.every((mesh) => candidateReceiverMeshes.includes(mesh)) &&
+      candidateHelper.visible === helperWasVisible;
+    if (!candidateIsValid) {
+      throw new Error("Candidate media session failed host validation");
+    }
+  } catch (error) {
+    const rollback = rollbackCandidateSession({
+      candidateProjector,
+      candidateHelper,
+      candidateUnsubscribe,
+    });
+    mediaSelect.value = activeMediaId;
+    setRuntimeMessage(
+      `Could not switch to ${nextMediaOption.label}. The current media session remains active.`,
+    );
+    latestMediaSwitchReport = Object.freeze({
+      fromMediaId: activeMediaId,
+      toMediaId: nextMediaId,
+      replaced: false,
+      oldProjectorDisposed: false,
+      oldMediaSourceDisposed: false,
+      oldVideoSourceCleared: false,
+      projectorReplaced: false,
+      mediaSourceReplaced: false,
+      videoElementReplaced: false,
+      textureReplaced: false,
+      receiverRootPreserved: true,
+      receiverMeshCountPreserved: true,
+      overlayCountPreserved: true,
+      posePreserved: true,
+      parametersPreserved: true,
+      helperVisibilityPreserved: true,
+      previousTime,
+      nextTime: projector.mediaSource.video.currentTime,
+      timelineTransferred: false,
+      candidateRolledBack: true,
+      oldProjectorActive: !oldProjector.getStatus().disposed,
+      sessionGenerationPreserved: sessionGeneration === oldSessionGeneration,
+      ...rollback,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    mediaSwitchInFlight = false;
+    mediaSelect.disabled = false;
+    return latestMediaSwitchReport;
+  }
+
+  // COMMIT: publish the fully prepared candidate as the single active host
+  // session before attempting any best-effort cleanup of the old session.
+  try {
+    projector = candidateProjector;
+    projectorHelper = candidateHelper;
+    unsubscribeStatus = candidateUnsubscribe;
+    activeMediaId = nextMediaOption.id;
+    settings.mediaId = activeMediaId;
+    sessionGeneration = oldSessionGeneration + 1;
+
+    scene.add(projectorHelper);
+    projectorHelper.update();
+    mediaSelect.value = activeMediaId;
+    controlsById.get("projector-helper").checked = projectorHelper.visible;
+    renderStatus(candidateStatus);
+  } catch (error) {
+    projector = oldProjector;
+    projectorHelper = oldProjectorHelper;
+    unsubscribeStatus = oldUnsubscribeStatus;
+    activeMediaId = currentMediaOption.id;
+    settings.mediaId = oldSettingsMediaId;
+    sessionGeneration = oldSessionGeneration;
+    const rollback = rollbackCandidateSession({
+      candidateProjector,
+      candidateHelper,
+      candidateUnsubscribe,
+    });
+    mediaSelect.value = activeMediaId;
+    controlsById.get("projector-helper").checked = projectorHelper.visible;
+    runSandboxCleanupStep(() => renderStatus(oldProjector.getStatus()));
+    setRuntimeMessage(
+      `Could not switch to ${nextMediaOption.label}. The current media session remains active.`,
+    );
+    latestMediaSwitchReport = Object.freeze({
+      fromMediaId: activeMediaId,
+      toMediaId: nextMediaId,
+      replaced: false,
+      oldProjectorDisposed: false,
+      oldMediaSourceDisposed: false,
+      oldVideoSourceCleared: false,
+      projectorReplaced: false,
+      mediaSourceReplaced: false,
+      videoElementReplaced: false,
+      textureReplaced: false,
+      receiverRootPreserved: true,
+      receiverMeshCountPreserved: true,
+      overlayCountPreserved: true,
+      posePreserved: true,
+      parametersPreserved: true,
+      helperVisibilityPreserved: true,
+      previousTime,
+      nextTime: projector.mediaSource.video.currentTime,
+      timelineTransferred: false,
+      candidateRolledBack: true,
+      oldProjectorActive: !oldProjector.getStatus().disposed,
+      sessionGenerationPreserved: sessionGeneration === oldSessionGeneration,
+      ...rollback,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return latestMediaSwitchReport;
+  } finally {
+    if (projector !== candidateProjector) {
+      mediaSwitchInFlight = false;
+      mediaSelect.disabled = false;
+    }
+  }
+
+  // CLEANUP: the new session is already active, so individual failures while
+  // retiring the old host-owned resources cannot invalidate the commit.
+  const oldStatusUnsubscribed = runSandboxCleanupStep(() => {
+    oldUnsubscribeStatus();
+    return true;
+  });
+  const oldHelperRemoved = runSandboxCleanupStep(() => {
+    oldProjectorHelper.removeFromParent();
+    return oldProjectorHelper.parent === null;
+  });
+  const oldHelperDisposed = runSandboxCleanupStep(() => {
+    oldProjectorHelper.dispose();
+    return true;
+  });
+  const oldProjectorDisposed = runSandboxCleanupStep(
+    () => oldProjector.dispose(),
+    false,
+  );
+  const oldMediaSourceDisposed = Boolean(
+    runSandboxCleanupStep(() => oldMediaSource.getSnapshot?.().disposed),
+  );
+  const oldVideoSourceAttribute = runSandboxCleanupStep(
+    () => oldVideoElement.getAttribute("src"),
+    null,
+  );
+  const oldVideoSourceCleared =
+    oldVideoSourceAttribute === null || oldVideoSourceAttribute === "";
+  const nextTime = projector.mediaSource.video.currentTime;
+  latestMediaSwitchReport = Object.freeze({
+    fromMediaId: currentMediaOption.id,
+    toMediaId: nextMediaOption.id,
+    replaced: true,
+    oldProjectorDisposed,
+    oldMediaSourceDisposed,
+    oldVideoSourceCleared,
+    oldStatusUnsubscribed,
+    oldHelperRemoved,
+    oldHelperDisposed,
+    projectorReplaced: projector !== oldProjector,
+    mediaSourceReplaced: projector.mediaSource !== oldMediaSource,
+    videoElementReplaced: projector.mediaSource.video !== oldVideoElement,
+    textureReplaced: projector.mediaSource.texture !== oldTexture,
+    receiverRootPreserved: projector.getReceiverRoots()[0] === receiverRoot,
+    receiverMeshCountPreserved:
+      candidateStatus.receiverMeshCount === oldReceiverCount &&
+      oldReceiverMeshes.every((mesh) => candidateReceiverMeshes.includes(mesh)),
+    overlayCountPreserved: candidateStatus.overlayCount === oldOverlayCount,
+    posePreserved: projectorPoseMatchesSettings(projector),
+    parametersPreserved: projectorParametersMatchSettings(projector),
+    helperVisibilityPreserved: projectorHelper.visible === helperWasVisible,
+    previousTime,
+    nextTime,
+    timelineTransferred: false,
+    playbackStatus: candidatePlayResult?.status || "unknown",
+  });
+
+  setRuntimeMessage(
+    candidatePlayResult?.status === "blocked"
+      ? `Switched to ${nextMediaOption.label}. Autoplay was blocked; use Play to start the new media session.`
+      : `Switched to ${nextMediaOption.label}. A new media session was created while pose and receivers were preserved.`,
+  );
+  mediaSwitchInFlight = false;
+  mediaSelect.disabled = false;
+  return latestMediaSwitchReport;
 };
 
 const updatePose = () => {
@@ -272,9 +654,13 @@ listen(controlsById.get("playback-toggle"), "click", async () => {
   const result = await projector.play();
   setRuntimeMessage(
     result?.ok
-      ? "Procedural video is playing."
+      ? `${getDemoMediaOption(activeMediaId)?.label || "Video"} is playing.`
       : "Autoplay was blocked; use Play after a browser gesture.",
   );
+});
+
+listen(mediaSelect, "change", (event) => {
+  void switchDemoMedia(event.currentTarget.value);
 });
 
 listen(controlsById.get("projection-enabled"), "change", (event) => {
@@ -420,6 +806,7 @@ const rebuildDynamicReceiver = () => {
 listen(controlsById.get("rebuild-receiver"), "click", rebuildDynamicReceiver);
 
 const writeSettingsToControls = () => {
+  mediaSelect.value = activeMediaId;
   controlsById.get("projection-enabled").checked = settings.enabled;
   controlsById.get("projection-muted").checked = settings.muted;
   controlsById.get("projection-volume").value = String(settings.volume);
@@ -494,7 +881,7 @@ animationFrameId = requestAnimationFrame(renderFrame);
 const initialPlay = await projector.play();
 setRuntimeMessage(
   initialPlay?.ok
-    ? "Muted procedural video is playing across explicit receivers."
+    ? `Muted ${defaultMediaOption.label} video is playing across explicit receivers.`
     : "Muted autoplay was blocked. Use Play to start the video.",
 );
 
@@ -538,6 +925,15 @@ globalThis.__projectorSpaceDemo = {
   get latestRebuildReport() {
     return latestRebuildReport;
   },
+  get activeMediaId() {
+    return activeMediaId;
+  },
+  get sessionGeneration() {
+    return sessionGeneration;
+  },
+  get latestMediaSwitchReport() {
+    return latestMediaSwitchReport;
+  },
   get settings() {
     return structuredClone(settings);
   },
@@ -553,5 +949,6 @@ globalThis.__projectorSpaceDemo = {
   },
   rebuildDynamicReceiver,
   resetDemo,
+  switchMedia: switchDemoMedia,
   teardown,
 };

@@ -298,9 +298,13 @@ npm run build:demo
 npm run preview:demo
 ```
 
-The demo uses one local, procedurally generated video. Inactive media are not
-preloaded, no media catalog is bundled, and the sandbox does not import package
-internals.
+The demo offers four local sources: three author-recorded Terrain Studies
+captured from [Zafiro Isle Lab](https://playzafiro.com/isle-lab/) and one
+procedural Abstract Color Field. Only one media session is active at a time,
+and inactive videos are not preloaded. The dropdown demonstrates host-owned
+media-session replacement while preserving projector pose and receiver
+registration. The sandbox-owned catalog remains outside the package source,
+and demo media is excluded from the package tarball.
 
 ## Live sandbox
 
@@ -336,4 +340,8 @@ is introduced.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+The software is MIT-licensed; see [LICENSE](LICENSE). The Terrain Study videos
+are original demonstration recordings captured from
+[Zafiro Isle Lab](https://playzafiro.com/isle-lab/) and created by Bartek Bąk.
+Media provenance and encoding details are documented in
+[examples/basic/public/media/README.md](examples/basic/public/media/README.md).

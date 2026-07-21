@@ -175,11 +175,18 @@ select {
 }
 
 .panel-header p,
-.inline-status {
+.inline-status,
+.control-help {
   margin: 0;
   color: #b9c6c1;
   font-size: 0.76rem;
   line-height: 1.55;
+}
+
+.control-help {
+  margin: 0.35rem 0 0.65rem;
+  color: #879791;
+  font-size: 0.68rem;
 }
 
 .panel-header a {
