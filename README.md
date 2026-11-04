@@ -292,7 +292,7 @@ spheres use a safe visible fallback and are not computed or mutated.
 ## Validation and tests
 
 Package-owned tests live in `tests/` and import only the public source entry.
-Use Node 24.18.0:
+Use Node.js 26.13.0 LTS:
 
 ```bash
 npm ci
@@ -317,7 +317,7 @@ rebuild. It is portability evidence and executable API documentation; it does
 not replace the application-scale validation that exposed the lifecycle and
 ownership requirements.
 
-Run it locally with Node 24.18.0:
+Run it locally with Node.js 26.13.0 LTS:
 
 ```bash
 npm ci
