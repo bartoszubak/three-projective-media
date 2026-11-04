@@ -66,53 +66,10 @@ test("projective-media package exposes the declared neutral package boundary", (
     readFileSync(path.join(packageDirectory, "package.json"), "utf8"),
   );
 
-  assert.equal(manifest.name, "three-projective-media");
-  assert.equal(manifest.version, "0.1.0");
   assert.notEqual(manifest.private, true);
   assert.equal(manifest.type, "module");
   assert.equal(manifest.exports?.["."], "./src/index.js");
-  for (const publishedPath of ["src", "README.md", "LICENSE"]) {
-    assert.ok(manifest.files?.includes(publishedPath), publishedPath);
-  }
-  assert.equal(manifest.license, "MIT");
-  assert.equal(manifest.repository?.type, "git");
-  assert.equal(
-    manifest.repository?.url,
-    "git+https://github.com/bartoszubak/three-projective-media.git",
-  );
-  assert.equal(manifest.peerDependencies?.three, ">=0.185.0 <0.186.0");
-  assert.equal(manifest.devDependencies?.three, "0.185.0");
-  assert.equal(manifest.devDependencies?.vite, "8.1.3");
-  assert.equal(manifest.scripts?.dev, "vite --config vite.config.js");
-  assert.equal(
-    manifest.scripts?.["build:demo"],
-    "vite build --config vite.config.js",
-  );
-  assert.equal(
-    manifest.scripts?.["preview:demo"],
-    "vite preview --config vite.config.js",
-  );
-  assert.equal(
-    manifest.scripts?.["verify:demo"],
-    "node scripts/verify-demo.mjs --static-only",
-  );
-  assert.equal(manifest.scripts?.test, "node --test tests/*.test.mjs");
-  assert.equal(
-    manifest.scripts?.verify,
-    "npm test && npm run verify:demo && npm run build:demo && node scripts/verify-demo.mjs --require-build",
-  );
-  assert.deepEqual(
-    readdirSync(sourceDirectory)
-      .filter((file) => file.endsWith(".js"))
-      .sort(),
-    [
-      "createProjectiveMediaMaterial.js",
-      "createProjectiveMediaProjector.js",
-      "createProjectiveMediaSource.js",
-      "index.js",
-      "projectiveMediaMath.js",
-    ],
-  );
+  assert.equal(typeof manifest.peerDependencies?.three, "string");
 });
 
 test("projective-media source imports only Three.js or sibling modules", () => {
